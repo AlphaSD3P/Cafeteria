@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>통합 퉁치기 & 잔고 일별 기록 (스위치 매매법 연동)</title>
+    <title>통합 퉁치기 & 잔고 일별 기록 (종가 기반 자동 매매 시트)</title>
     
     <!-- Firebase SDK (App, Firestore, Auth) 불러오기 -->
     <script type="module">
@@ -235,7 +235,7 @@
 
     <div class="header">
         <h1>통합 퉁치기 & 잔고 일별 기록</h1>
-        <p>클라우드 보안 실시간 동기화 시스템 (스위치 매매법 연동)</p>
+        <p>클라우드 보안 실시간 동기화 시스템 (종가 기반 자동 매매 시트)</p>
     </div>
 
     <div class="tabs" id="tab-buttons"></div>
@@ -250,7 +250,7 @@
 
     function getDefaultStrategies() {
         return [
-            { id: 'strat1', name: '스위치', defaultMult: 1, defaultCash: 24000, defaultShares: 0, defaultAvg: 0, defaultInit: 24000, switchParams: { closePrice: 102.32, totalCash: 24000, totalRounds: 16, holdingsQty: 0, currentRound: 0, gridStepQty: 1 } },
+            { id: 'strat1', name: '스위치', defaultMult: 1, defaultCash: 24000, defaultShares: 0, defaultAvg: 0, defaultInit: 24000, switchParams: { closePrice: 102.32, totalCash: 24000, totalRounds: 16, holdingsQty: 0, currentRound: 0 } },
             { id: 'strat2', name: '동파', defaultMult: 6, defaultCash: 68490.00, defaultShares: 90, defaultAvg: 125.87, defaultInit: 60000 },
             { id: 'strat3', name: '3쥐', defaultMult: 6, defaultCash: 49428.00, defaultShares: 12, defaultAvg: 123.31, defaultInit: 60000 },
             { id: 'strat4', name: '펑그마', defaultMult: 1, defaultCash: 5310.41, defaultShares: 1, defaultAvg: 108.89, defaultInit: 5000 },
@@ -301,8 +301,7 @@
                     totalCash: document.getElementById(`sw-cash-${strat.id}`) ? document.getElementById(`sw-cash-${strat.id}`).value : '',
                     totalRounds: document.getElementById(`sw-rounds-${strat.id}`) ? document.getElementById(`sw-rounds-${strat.id}`).value : '',
                     holdingsQty: document.getElementById(`sw-holdings-${strat.id}`) ? document.getElementById(`sw-holdings-${strat.id}`).value : '',
-                    currentRound: document.getElementById(`sw-current-round-${strat.id}`) ? document.getElementById(`sw-current-round-${strat.id}`).value : '',
-                    gridStepQty: document.getElementById(`sw-grid-qty-${strat.id}`) ? document.getElementById(`sw-grid-qty-${strat.id}`).value : ''
+                    currentRound: document.getElementById(`sw-current-round-${strat.id}`) ? document.getElementById(`sw-current-round-${strat.id}`).value : ''
                 };
             }
 
@@ -335,7 +334,7 @@
                                 <span style="font-size:13px; color:#666; font-weight:bold;">배</span>
                             </div>
                         </div>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 5px; padding-top: 8px; border-top: 1px dashed #cbd5e0;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 5px; padding-top: 8px; border-top: 1px dashed #cbd5e0;">
                             <div>
                                 <label style="font-size:11px;">💵 전일 종가($)</label>
                                 <input type="number" step="0.01" id="sw-close-${strat.id}" value="102.32" oninput="saveData()" style="width:100%;">
@@ -355,10 +354,6 @@
                             <div>
                                 <label style="font-size:11px;">📊 현재 회차</label>
                                 <input type="number" id="sw-current-round-${strat.id}" value="0" oninput="saveData()" style="width:100%;">
-                            </div>
-                            <div>
-                                <label style="font-size:11px;">🧱 그리드 단위(주)</label>
-                                <input type="number" id="sw-grid-qty-${strat.id}" value="1" oninput="saveData()" style="width:100%;">
                             </div>
                         </div>
                         <div style="display:flex; justify-content:space-between; align-items:center; background:#ebf8ff; padding:8px 12px; border-radius:6px; font-size:12px; color:#2b6cb0;">
@@ -543,15 +538,17 @@
         rows.forEach((row, index) => row.querySelector('.order-num').textContent = index + 1);
     }
 
+    // =========================================================================
+    // ✨ 스위치 매매법 정밀 구현 로직 (1회차 배정 매수금 기준 & -20% 이내 제한)
+    // =========================================================================
     window.applySwitchStrategyAutoOrders = function(stratId) {
         let closePrice = parseFloat(document.getElementById(`sw-close-${stratId}`).value) || 102.32;
         let totalCash = parseFloat(document.getElementById(`sw-cash-${stratId}`).value) || 24000;
         let totalRounds = parseInt(document.getElementById(`sw-rounds-${stratId}`).value) || 16;
         let holdingsQty = parseFloat(document.getElementById(`sw-holdings-${stratId}`).value) || 0;
         let currentRound = parseInt(document.getElementById(`sw-current-round-${stratId}`).value) || 0;
-        let gridStepQty = parseInt(document.getElementById(`sw-grid-qty-${stratId}`).value) || 1;
 
-        let roundBudget = totalCash / totalRounds;
+        let roundBudget = totalCash / totalRounds; // 1회차 배정 매수금
         let budgetEl = document.getElementById(`sw-budget-display-${stratId}`);
         if(budgetEl) budgetEl.textContent = `$${roundBudget.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
 
@@ -562,25 +559,38 @@
         buyContainer.innerHTML = '';
         sellContainer.innerHTML = '';
 
-        // 스위치 매수 주문 구성
         let buys = [];
+        let minAllowedPrice = closePrice * 0.80; // 전일 종가 기준 -20% 하한선
+
         if (holdingsQty === 0 || currentRound === 0) {
-            let buyPrice = closePrice * 1.10;
-            let buyQty = Math.floor(roundBudget / buyPrice);
-            if (buyQty > 0) buys.push({ price: buyPrice.toFixed(2), qty: buyQty });
+            let topPrice = closePrice * 1.10;
+            let topQty = Math.round(roundBudget / topPrice);
+            if (topQty <= 0) topQty = 1;
+            buys.push({ price: topPrice.toFixed(2), qty: topQty });
+
+            let q = topQty + 1;
+            while (true) {
+                let gridPrice = roundBudget / q;
+                if (gridPrice < minAllowedPrice) break;
+                buys.push({ price: gridPrice.toFixed(2), qty: q });
+                q++;
+                if (buys.length >= 15) break;
+            }
+        } else {
+            let startQty = Math.max(1, Math.floor(roundBudget / closePrice));
+            let q = startQty;
+            while (true) {
+                let gridPrice = roundBudget / q;
+                if (gridPrice < minAllowedPrice) break;
+                buys.push({ price: gridPrice.toFixed(2), qty: q });
+                q++;
+                if (buys.length >= 15) break;
+            }
         }
 
-        // 하락 방어 그리드 (-4% ~ -20%)
-        let dropSteps = [-4.0, -8.0, -12.0, -16.0, -20.0];
-        dropSteps.forEach(pct => {
-            let stepPrice = closePrice * (1 + pct / 100);
-            buys.push({ price: stepPrice.toFixed(2), qty: gridStepQty });
-        });
-
         buys.forEach(b => window.addRow(stratId, 'buy', b.price, b.qty));
-        for(let i=buys.length; i<3; i++) window.addRow(stratId, 'buy');
+        for(let i=buys.length; i<6; i++) window.addRow(stratId, 'buy');
 
-        // 스위치 매도 주문 구성 (퉁치기)
         let sells = [];
         if (holdingsQty > 0 && currentRound > 0) {
             let sellQtyPerRound = Math.round(holdingsQty / currentRound);
@@ -595,7 +605,7 @@
         for(let i=sells.length; i<3; i++) window.addRow(stratId, 'sell');
 
         saveData();
-        alert("스위치 매매법 규칙에 따라 오늘의 주문이 자동으로 생성 및 적용되었습니다.");
+        alert("스위치 매매법 규칙에 따라 주문이 정확하게 자동 생성되었습니다.");
     };
 
     function loadDataForDate(stratIdTarget) {
@@ -615,20 +625,18 @@
             let dayData = window.allData[dateVal] && window.allData[dateVal][strat.id] ? window.allData[dateVal][strat.id] : null;
 
             if (strat.id === 'strat1' || strat.name === '스위치') {
-                let p = (dayData && dayData.switchParams) ? dayData.switchParams : (strat.switchParams || { closePrice: 102.32, totalCash: 24000, totalRounds: 16, holdingsQty: 0, currentRound: 0, gridStepQty: 1 });
+                let p = (dayData && dayData.switchParams) ? dayData.switchParams : (strat.switchParams || { closePrice: 102.32, totalCash: 24000, totalRounds: 16, holdingsQty: 0, currentRound: 0 });
                 let closeEl = document.getElementById(`sw-close-${strat.id}`);
                 let cashEl = document.getElementById(`sw-cash-${strat.id}`);
                 let roundsEl = document.getElementById(`sw-rounds-${strat.id}`);
                 let holdingsEl = document.getElementById(`sw-holdings-${strat.id}`);
                 let curRoundEl = document.getElementById(`sw-current-round-${strat.id}`);
-                let gridQtyEl = document.getElementById(`sw-grid-qty-${strat.id}`);
 
                 if(closeEl) closeEl.value = p.closePrice || 102.32;
                 if(cashEl) cashEl.value = p.totalCash || 24000;
                 if(roundsEl) roundsEl.value = p.totalRounds || 16;
                 if(holdingsEl) holdingsEl.value = p.holdingsQty || 0;
                 if(curRoundEl) curRoundEl.value = p.currentRound || 0;
-                if(gridQtyEl) gridQtyEl.value = p.gridStepQty || 1;
 
                 let rb = (parseFloat(p.totalCash) || 24000) / (parseInt(p.totalRounds) || 16);
                 let budgetEl = document.getElementById(`sw-budget-display-${strat.id}`);
@@ -694,14 +702,22 @@
         let nameInput = document.getElementById('new-strat-name');
         let name = nameInput.value.trim();
         if(!name) { alert("기법 이름을 입력해주세요."); return; }
-        window.strategies.push({ id: 'strat_' + Date.now(), name: name, defaultMult: 1, defaultCash: 50000, defaultShares: 0, defaultAvg: 0, defaultInit: 50000 });
+        window.strategies.push({ 
+            id: 'strat_' + Date.now(), 
+            name: name, 
+            defaultMult: 1, 
+            defaultCash: 50000, 
+            defaultShares: 0, 
+            defaultAvg: 0, 
+            defaultInit: 50000 
+        });
         await window.saveCloudDataInstant();
         location.reload();
     };
 
     window.deleteStrategy = async function(stratId) {
         if(window.strategies.length <= 1) { alert("최소 1개의 기법은 남아있어야 합니다."); return; }
-        if(!confirm("삭제하시겠습니까?")) return;
+        if(!confirm("해당 기법을 삭제하시겠습니까?")) return;
         window.strategies = window.strategies.filter(s => s.id !== stratId);
         await window.saveCloudDataInstant();
         location.reload();
