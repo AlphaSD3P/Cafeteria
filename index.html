@@ -24,6 +24,7 @@
         };
 
         const OWNER_EMAIL = "alphasd3p@gmail.com";
+
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
@@ -55,7 +56,7 @@
 
         async function loadCloudData() {
             try {
-                const docSnap = await getDoc(doc(db, "appData", "masterSystemState"));
+                const docSnap = await getDoc(doc(db, "appData", "masterSystemStateClean"));
                 if (docSnap.exists()) {
                     let d = docSnap.data();
                     if(d.closePrice) document.getElementById('close-price').value = d.closePrice;
@@ -64,8 +65,8 @@
                     if(d.history) window.appHistory = d.history;
                 }
             } catch (e) { console.error("데이터 로드 실패:", e); }
-            if(!window.techniques) {
-                // 기본 초기 기법 세팅
+            
+            if(!window.techniques || window.techniques.length === 0) {
                 window.techniques = [
                     { name: '스위치', qty: 40, avgPrice: 106.85, remainUsd: 68408.58, initialCapital: 60000 },
                     { name: '동파', qty: 186, avgPrice: 111.22, remainUsd: 58308.72, initialCapital: 60000 },
@@ -73,13 +74,14 @@
                     { name: '평그마', qty: 34, avgPrice: 105.45, remainUsd: 1873.81, initialCapital: 5000 }
                 ];
             }
+            initTabs();
             renderAll();
         }
 
         window.saveToCloud = async function() {
             updateTechniquesFromDOM();
             try {
-                await setDoc(doc(db, "appData", "masterSystemState"), {
+                await setDoc(doc(db, "appData", "masterSystemStateClean"), {
                     closePrice: document.getElementById('close-price').value,
                     fxRate: document.getElementById('fx-rate').value,
                     techniques: window.techniques,
@@ -88,8 +90,6 @@
                 alert("클라우드에 안전하게 동기화 및 저장되었습니다.");
             } catch (e) { alert("저장 실패: " + e.message); }
         }
-        
-        window.dbRef = { setDoc, doc, db };
     </script>
 
     <style>
@@ -108,7 +108,7 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-        /* 상단 공통 바 */
+        /* 상단 공통 시세 바 */
         .global-bar { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap; }
         .input-group { display: flex; align-items: center; gap: 8px; }
         .input-group label { font-size: 12px; font-weight: bold; color: #4a5568; }
@@ -139,16 +139,13 @@
         <button onclick="logout()" style="background:none; border:1px solid #cbd5e0; padding:3px 8px; border-radius:4px; cursor:pointer; color:#e53e3e; font-weight:bold;">로그아웃</button>
     </div>
 
-    <!-- 탭 네비게이션 (기법들 + 결과보기 + 잔고&일별기록 + 기법관리) -->
-    <div class="tab-nav" id="dynamic-tabs">
-        <!-- 동적으로 생성 및 고정 탭 위치 -->
-        <button class="tab-btn active" onclick="openTab('tab-balance')">📊 잔고 & 일별기록</button>
-        <button class="tab-btn" onclick="openTab('tab-result')">📈 결과보기</button>
-        <button class="tab-btn" onclick="openTab('tab-mgmt')">⚙️ 기법 관리</button>
+    <!-- 탭 네비게이션 -->
+    <div class="tab-nav" id="tab-container">
+        <!-- 동적 기법 탭들 + 결과보기 + 잔고&일별기록 + 기법관리 -->
     </div>
 
-    <!-- 공통 입력 바 -->
-    <div class="global-bar">
+    <!-- 상단 공통 시세 바 (기법관리 탭에서는 숨김 처리됨) -->
+    <div class="global-bar" id="global-bar">
         <div class="input-group">
             <label>📅 기록 날짜</label>
             <input type="date" id="target-date">
@@ -163,7 +160,7 @@
         </div>
     </div>
 
-    <!-- [탭 1] 잔고 & 일별기록 (스크린샷 동일 구현) -->
+    <!-- [탭] 잔고 & 일별기록 -->
     <div id="tab-balance" class="tab-content active">
         <div class="card">
             <table>
@@ -179,32 +176,26 @@
                         <th>초기자금($)</th>
                     </tr>
                 </thead>
-                <tbody id="balance-tbody">
-                    <!-- 자바스크립트 렌더링 -->
-                </tbody>
+                <tbody id="balance-tbody"></tbody>
             </table>
 
-            <!-- 원화 환산액 배너 -->
             <div style="background:#f0fff4; border:1px solid #c6f6d5; padding:15px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap;">
-                <span id="krw-summary-text" style="font-weight:bold; color:#22543d; font-size:14px;">💱 원화 환산액 (₩1,353.3/$1) | 전일 대비: ▲ ₩4,715,235 (1.71%)</span>
-                <span id="total-krw-big" style="font-size:20px; font-weight:bold; color:#276749;">₩280,123,343</span>
+                <span id="krw-summary-text" style="font-weight:bold; color:#22543d; font-size:14px;">💱 원화 환산액 | 전일 대비</span>
+                <span id="total-krw-big" style="font-size:20px; font-weight:bold; color:#276749;">₩0</span>
             </div>
 
             <button class="action-btn" onclick="recordDailyHistory()">💾 일별 잔고 클라우드 기록 저장</button>
         </div>
 
-        <!-- 일별 누적 히스토리 영역 -->
         <div class="card">
-            <div style="font-weight:bold; font-size:14px; margin-bottom:15px; color:#2d3748; display:flex; justify-content:space-between; align-items:center;">
-                <span>📋 일별 누적 히스토리</span>
-            </div>
+            <div style="font-weight:bold; font-size:14px; margin-bottom:15px; color:#2d3748;">📋 일별 누적 히스토리</div>
             <div id="history-container">
                 <p style="text-align:center; color:#aaa;">저장된 일별 기록이 없습니다.</p>
             </div>
         </div>
     </div>
 
-    <!-- [탭 2] 결과보기 (퉁치기 주문) -->
+    <!-- [탭] 결과보기 -->
     <div id="tab-result" class="tab-content">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
             <div class="card">
@@ -218,30 +209,24 @@
         </div>
     </div>
 
-    <!-- [탭 3] 기법 관리 (기법 추가 / 삭제 / 수정) -->
+    <!-- [탭] 기법 관리 (날짜/종가/환율 바 숨김 처리됨) -->
     <div id="tab-mgmt" class="tab-content">
         <div class="card">
-            <div style="font-weight:bold; font-size:14px; margin-bottom:15px; color:#2d3748;">⚙️ 매매기법 추가 및 관리</div>
-            <div style="display:flex; gap:10px; margin-bottom:15px;">
-                <input type="text" id="new-tech-name" placeholder="추가할 기법명 (예: 신규기법)" style="padding:8px; border:1px solid #cbd5e0; border-radius:6px; flex:1;">
-                <button onclick="addTechnique()" style="padding:8px 16px; background:#3182ce; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">기법 추가</button>
+            <div style="font-weight:bold; font-size:14px; margin-bottom:15px; color:#2d3748;">⚙️ 매매기법 관리</div>
+            <div id="mgmt-rows-container" style="margin-bottom:20px;"></div>
+            
+            <div style="display:flex; gap:10px; margin-bottom:20px;">
+                <input type="text" id="new-tech-name" placeholder="추가할 새 기법 이름 입력" style="padding:10px; border:1px solid #cbd5e0; border-radius:6px; flex:1; font-size:13px;">
+                <button onclick="addTechnique()" style="padding:10px 20px; background:#38a169; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer; font-size:13px;">+ 기법 추가</button>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>기법명</th>
-                        <th>기본 수량</th>
-                        <th>기본 평단($)</th>
-                        <th>잔여 달러($)</th>
-                        <th>초기 자금($)</th>
-                        <th>관리</th>
-                    </tr>
-                </thead>
-                <tbody id="mgmt-tbody"></tbody>
-            </table>
+            
+            <button class="action-btn" style="background:#e53e3e; margin-bottom:10px;" onclick="resetAllTechniques()">전체 초기화</button>
             <button class="action-btn" style="background:#3182ce;" onclick="saveToCloud()">☁️ 클라우드 설정 전체 저장</button>
         </div>
     </div>
+
+    <!-- [동적] 개별 기법 탭 콘텐츠용 컨테이너 -->
+    <div id="dynamic-tech-contents"></div>
 </div>
 
 <script>
@@ -254,11 +239,64 @@
     ];
     window.appHistory = [];
 
+    function initTabs() {
+        const nav = document.getElementById('tab-container');
+        let html = '';
+        
+        // 개별 기법 탭 생성
+        window.techniques.forEach((t, idx) => {
+            html += `<button class="tab-btn ${idx===0 ? 'active' : ''}" onclick="openTab('tab-tech-${idx}')">${t.name}</button>`;
+        });
+
+        // 고정 탭 생성
+        html += `
+            <button class="tab-btn" onclick="openTab('tab-result')">결과보기</button>
+            <button class="tab-btn" onclick="openTab('tab-balance')">잔고&일별기록</button>
+            <button class="tab-btn" onclick="openTab('tab-mgmt')">기법 관리</button>
+        `;
+        nav.innerHTML = html;
+
+        // 개별 기법 탭 컨텐츠 생성
+        const dynContainer = document.getElementById('dynamic-tech-contents');
+        let dynHtml = '';
+        window.techniques.forEach((t, idx) => {
+            dynHtml += `
+                <div id="tab-tech-${idx}" class="tab-content ${idx===0 ? 'active' : ''}">
+                    <div class="card">
+                        <div style="font-weight:bold; font-size:15px; color:#2b6cb0; margin-bottom:15px;">📌 [${t.name}] 기법 상세 설정</div>
+                        <p style="font-size:13px; color:#555;">이 기법의 상세 파라미터 및 개별 회차 설정 영역입니다.</p>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:15px;">
+                            <div class="input-group" style="flex-direction:column; align-items:flex-start;"><label>보유 수량 (주)</label><input type="number" id="detail-qty-${idx}" value="${t.qty}" oninput="syncDetailInput(${idx}, 'qty')" style="width:100%;"></div>
+                            <div class="input-group" style="flex-direction:column; align-items:flex-start;"><label>평균가 ($)</label><input type="number" step="0.01" id="detail-avg-${idx}" value="${t.avgPrice}" oninput="syncDetailInput(${idx}, 'avg')" style="width:100%;"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        dynContainer.innerHTML = dynHtml;
+    }
+
     function openTab(tabId) {
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        document.getElementById(tabId).classList.add('active');
-        event.currentTarget.classList.add('active');
+        
+        const targetTab = document.getElementById(tabId);
+        if(targetTab) targetTab.classList.add('active');
+        
+        // 클릭된 버튼 활성화 찾기
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            if(btn.getAttribute('onclick')?.includes(tabId)) {
+                btn.classList.add('active');
+            }
+        });
+
+        // ⭐ 핵심: '기법 관리' 탭일 때는 상단 시세 바(날짜/종가/환율)를 숨기고, 그 외 탭에서는 보여줌
+        const globalBar = document.getElementById('global-bar');
+        if (tabId === 'tab-mgmt') {
+            globalBar.style.display = 'none';
+        } else {
+            globalBar.style.display = 'flex';
+        }
     }
 
     function updateTechniquesFromDOM() {
@@ -275,13 +313,26 @@
         });
     }
 
+    function syncDetailInput(idx, field) {
+        if(field === 'qty') {
+            let val = document.getElementById(`detail-qty-${idx}`).value;
+            let targetInput = document.getElementById(`qty-${idx}`);
+            if(targetInput) targetInput.value = val;
+        } else if(field === 'avg') {
+            let val = document.getElementById(`detail-avg-${idx}`).value;
+            let targetInput = document.getElementById(`avg-${idx}`);
+            if(targetInput) targetInput.value = val;
+        }
+        renderAll();
+    }
+
     function renderAll() {
         updateTechniquesFromDOM();
         let closePrice = parseFloat(document.getElementById('close-price').value) || 0;
         let fxRate = parseFloat(document.getElementById('fx-rate').value) || 1350;
 
         let balanceHtml = '';
-        let mgmtHtml = '';
+        let mgmtRowsHtml = '';
         let buyHtml = '';
         let sellHtml = '';
 
@@ -306,7 +357,7 @@
             let profitColor = profitUsd >= 0 ? '#e53e3e' : '#3182ce';
             let profitArrow = profitUsd >= 0 ? '▲' : '▼';
 
-            // 잔고 테이블 행
+            // 잔고 테이블
             balanceHtml += `
                 <tr>
                     <td><b>${t.name}</b></td>
@@ -320,19 +371,16 @@
                 </tr>
             `;
 
-            // 기법 관리 테이블 행
-            mgmtHtml += `
-                <tr>
-                    <td><b>${t.name}</b></td>
-                    <td>${t.qty}주</td>
-                    <td>$${t.avgPrice}</td>
-                    <td>$${t.remainUsd}</td>
-                    <td>$${t.initialCapital}</td>
-                    <td><button onclick="removeTechnique(${i})" style="background:#e53e3e; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">삭제</button></td>
-                </tr>
+            // 기법 관리 리스트 (스크린샷 참조형태)
+            mgmtRowsHtml += `
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; background:#f7fafc; padding:10px; border:1px solid #e2e8f0; border-radius:6px;">
+                    <span style="font-weight:bold; width:40px; color:#4a5568;">#${i+1}</span>
+                    <input type="text" value="${t.name}" onchange="updateTechniqueName(${i}, this.value)" style="flex:1; padding:8px; border:1px solid #cbd5e0; border-radius:4px; font-weight:bold;">
+                    <button onclick="removeTechnique(${i})" style="background:#e53e3e; color:#fff; border:none; padding:8px 14px; border-radius:4px; cursor:pointer; font-weight:bold;">삭제</button>
+                </div>
             `;
 
-            // 결과보기 퉁치기 주문 계산
+            // 결과보기 퉁치기
             let buyPrice = closePrice * 0.98;
             let sellPrice = closePrice * 1.02;
             buyHtml += `<div style="padding:8px; border-bottom:1px solid #edf2f7; font-size:12px; font-weight:bold;">[${t.name}] LOC 매수 $${buyPrice.toFixed(2)} (${Math.max(1, Math.floor(t.qty*0.2))}주)</div>`;
@@ -343,7 +391,6 @@
         let totalReturn = totalInitCap > 0 ? (totalProfitUsd / totalInitCap) * 100 : 0;
         let totalProfitColor = totalProfitUsd >= 0 ? '#e53e3e' : '#3182ce';
 
-        // 합계 행 추가
         balanceHtml += `
             <tr style="background:#f7fafc; font-weight:bold;">
                 <td>합계</td>
@@ -358,7 +405,7 @@
         `;
 
         document.getElementById('balance-tbody').innerHTML = balanceHtml;
-        document.getElementById('mgmt-tbody').innerHTML = mgmtHtml;
+        document.getElementById('mgmt-rows-container').innerHTML = mgmtRowsHtml;
         document.getElementById('result-buy-list').innerHTML = buyHtml;
         document.getElementById('result-sell-list').innerHTML = sellHtml;
 
@@ -367,17 +414,41 @@
         document.getElementById('krw-summary-text').textContent = `💱 원화 환산액 (₩${fxRate}/$1) | 평가총합: $${totalValUsd.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
     }
 
+    function updateTechniqueName(index, newName) {
+        if(!newName.trim()) return;
+        window.techniques[index].name = newName.trim();
+        initTabs();
+        renderAll();
+    }
+
     function addTechnique() {
-        let name = document.getElementById('new-tech-name').value.trim();
-        if (!name) { alert('기법명을 입력하세요.'); return; }
+        let nameInput = document.getElementById('new-tech-name');
+        let name = nameInput.value.trim();
+        if (!name) { alert('추가할 기법 이름을 입력하세요.'); return; }
         window.techniques.push({ name: name, qty: 10, avgPrice: 100.0, remainUsd: 10000.0, initialCapital: 10000 });
-        document.getElementById('new-tech-name').value = '';
+        nameInput.value = '';
+        initTabs();
         renderAll();
     }
 
     function removeTechnique(index) {
+        if(window.techniques.length <= 1) {
+            alert('최소 1개의 기법은 남아있어야 합니다.');
+            return;
+        }
         if(confirm(`"${window.techniques[index].name}" 기법을 삭제하시겠습니까?`)) {
             window.techniques.splice(index, 1);
+            initTabs();
+            renderAll();
+        }
+    }
+
+    function resetAllTechniques() {
+        if(confirm('모든 기법 설정을 초기화하시겠습니까?')) {
+            window.techniques = [
+                { name: '스위치', qty: 40, avgPrice: 106.85, remainUsd: 68408.58, initialCapital: 60000 }
+            ];
+            initTabs();
             renderAll();
         }
     }
