@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스위치 멀티 자동 퉁치기 시스템</title>
+    <title>통합 매매기법 자동 퉁치기 & 잔고 관리 시스템</title>
     
     <!-- Firebase SDK 불러오기 -->
     <script type="module">
@@ -24,7 +24,6 @@
         };
 
         const OWNER_EMAIL = "alphasd3p@gmail.com";
-
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
@@ -56,49 +55,41 @@
 
         async function loadCloudData() {
             try {
-                const docSnap = await getDoc(doc(db, "appData", "switchMasterState"));
+                const docSnap = await getDoc(doc(db, "appData", "masterSystemState"));
                 if (docSnap.exists()) {
                     let d = docSnap.data();
                     if(d.closePrice) document.getElementById('close-price').value = d.closePrice;
                     if(d.fxRate) document.getElementById('fx-rate').value = d.fxRate;
-                    
-                    // Switch configs
-                    ['s1', 's2', 's3'].forEach(s => {
-                        if(d[s+'_rounds']) document.getElementById(s+'-rounds').value = d[s+'_rounds'];
-                        if(d[s+'_drop']) document.getElementById(s+'-drop').value = d[s+'_drop'];
-                        if(d[s+'_curr']) document.getElementById(s+'-curr').value = d[s+'_curr'];
-                        if(d[s+'_qty']) document.getElementById(s+'-qty').value = d[s+'_qty'];
-                    });
-
+                    if(d.techniques) window.techniques = d.techniques;
                     if(d.history) window.appHistory = d.history;
                 }
             } catch (e) { console.error("데이터 로드 실패:", e); }
-            calculateAndRender();
+            if(!window.techniques) {
+                // 기본 초기 기법 세팅
+                window.techniques = [
+                    { name: '스위치', qty: 40, avgPrice: 106.85, remainUsd: 68408.58, initialCapital: 60000 },
+                    { name: '동파', qty: 186, avgPrice: 111.22, remainUsd: 58308.72, initialCapital: 60000 },
+                    { name: '3쥐', qty: 54, avgPrice: 110.56, remainUsd: 44850.78, initialCapital: 60000 },
+                    { name: '평그마', qty: 34, avgPrice: 105.45, remainUsd: 1873.81, initialCapital: 5000 }
+                ];
+            }
+            renderAll();
         }
 
         window.saveToCloud = async function() {
-            calculateAndRender();
+            updateTechniquesFromDOM();
             try {
-                await setDoc(doc(db, "appData", "switchMasterState"), {
+                await setDoc(doc(db, "appData", "masterSystemState"), {
                     closePrice: document.getElementById('close-price').value,
                     fxRate: document.getElementById('fx-rate').value,
-                    s1_rounds: document.getElementById('s1-rounds').value,
-                    s1_drop: document.getElementById('s1-drop').value,
-                    s1_curr: document.getElementById('s1-curr').value,
-                    s1_qty: document.getElementById('s1-qty').value,
-                    s2_rounds: document.getElementById('s2-rounds').value,
-                    s2_drop: document.getElementById('s2-drop').value,
-                    s2_curr: document.getElementById('s2-curr').value,
-                    s2_qty: document.getElementById('s2-qty').value,
-                    s3_rounds: document.getElementById('s3-rounds').value,
-                    s3_drop: document.getElementById('s3-drop').value,
-                    s3_curr: document.getElementById('s3-curr').value,
-                    s3_qty: document.getElementById('s3-qty').value,
+                    techniques: window.techniques,
                     history: window.appHistory || []
                 });
-                alert("설정 및 상태가 클라우드에 안전하게 저장되었습니다.");
+                alert("클라우드에 안전하게 동기화 및 저장되었습니다.");
             } catch (e) { alert("저장 실패: " + e.message); }
         }
+        
+        window.dbRef = { setDoc, doc, db };
     </script>
 
     <style>
@@ -107,38 +98,37 @@
         #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 400px; text-align: center; position: absolute; top: 35vh; }
         .google-btn { width: 100%; padding: 12px; background: #fff; border: 1px solid #cbd5e0; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; }
         
-        #app-screen { display: none; width: 100%; max-width: 1000px; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 25px; }
+        #app-screen { display: none; width: 100%; max-width: 1100px; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 25px; }
         
-        /* 탭 내비게이션 바 */
-        .tab-nav { display: flex; gap: 8px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px; overflow-x: auto; }
-        .tab-btn { padding: 8px 16px; background: #edf2f7; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; color: #4a5568; transition: all 0.2s; }
-        .tab-btn.active { background: #2b6cb0; color: #fff; }
+        /* 탭 네비게이션 바 */
+        .tab-nav { display: flex; gap: 6px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px; overflow-x: auto; flex-wrap: wrap; }
+        .tab-btn { padding: 8px 14px; background: #edf2f7; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; color: #4a5568; transition: all 0.2s; }
+        .tab-btn.active { background: #3182ce; color: #fff; }
 
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
         /* 상단 공통 바 */
-        .global-bar { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; justify-content: center; flex-wrap: wrap; }
-        .input-group { display: flex; flex-direction: column; gap: 4px; }
-        .input-group label { font-size: 11px; font-weight: bold; color: #4a5568; }
-        .input-group input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 13px; width: 130px; }
+        .global-bar { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center; justify-content: center; flex-wrap: wrap; }
+        .input-group { display: flex; align-items: center; gap: 8px; }
+        .input-group label { font-size: 12px; font-weight: bold; color: #4a5568; }
+        .input-group input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 13px; width: 120px; }
 
-        /* 카드 및 테이블 스타일 */
-        .card { background: #fafbfc; border: 1px solid #cbd5e0; border-radius: 8px; padding: 20px; margin-bottom: 15px; }
-        .card-title { font-size: 14px; font-weight: bold; margin-bottom: 15px; color: #2b6cb0; border-bottom: 2px solid #edf2f7; padding-bottom: 8px; }
-        
-        table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; margin-bottom: 15px; }
+        /* 테이블 스타일 */
+        table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; margin-bottom: 15px; background: #fff; }
         th, td { border: 1px solid #e2e8f0; padding: 10px; }
-        th { background: #f7fafc; color: #4a5568; }
+        th { background: #f7fafc; color: #4a5568; font-weight: bold; }
+        td input { width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px; text-align: center; font-size: 13px; }
 
-        .action-btn { width: 100%; padding: 12px; background: #2b6cb0; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .action-btn:hover { background: #2c5282; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .action-btn { width: 100%; padding: 12px; background: #38a169; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .action-btn:hover { background: #2f855a; }
     </style>
 </head>
 <body>
 
 <div id="login-screen">
-    <h2>🔒 스위치 멀티 보안 로그인</h2>
+    <h2>🔒 보안 로그인</h2>
     <p>관리자 계정으로만 접속 가능합니다.</p>
     <button class="google-btn" onclick="loginWithGoogle()">구글 계정으로 로그인</button>
 </div>
@@ -149,125 +139,119 @@
         <button onclick="logout()" style="background:none; border:1px solid #cbd5e0; padding:3px 8px; border-radius:4px; cursor:pointer; color:#e53e3e; font-weight:bold;">로그아웃</button>
     </div>
 
-    <!-- 상단 탭 네비게이션 -->
-    <div class="tab-nav">
-        <button class="tab-btn active" onclick="openTab('tab-s1')">🔵 스위치 1</button>
-        <button class="tab-btn" onclick="openTab('tab-s2')">🟡 스위치 2</button>
-        <button class="tab-btn" onclick="openTab('tab-s3')">🟢 스위치 3</button>
-        <button class="tab-btn" onclick="openTab('tab-result')">📊 결과보기</button>
-        <button class="tab-btn" onclick="openTab('tab-history')">📈 잔고 & 일별기록</button>
+    <!-- 탭 네비게이션 (기법들 + 결과보기 + 잔고&일별기록 + 기법관리) -->
+    <div class="tab-nav" id="dynamic-tabs">
+        <!-- 동적으로 생성 및 고정 탭 위치 -->
+        <button class="tab-btn active" onclick="openTab('tab-balance')">📊 잔고 & 일별기록</button>
+        <button class="tab-btn" onclick="openTab('tab-result')">📈 결과보기</button>
         <button class="tab-btn" onclick="openTab('tab-mgmt')">⚙️ 기법 관리</button>
     </div>
 
-    <!-- 공통 입력 바 (종가 & 환율) -->
+    <!-- 공통 입력 바 -->
     <div class="global-bar">
         <div class="input-group">
-            <label>📅 기준 날짜</label>
+            <label>📅 기록 날짜</label>
             <input type="date" id="target-date">
         </div>
         <div class="input-group">
-            <label>💵 당일 종가 ($)</label>
-            <input type="number" step="0.01" id="close-price" value="106.85" oninput="calculateAndRender()">
+            <label>💵 당일 종가($)</label>
+            <input type="number" step="0.01" id="close-price" value="106.85" oninput="renderAll()">
         </div>
         <div class="input-group">
-            <label>💱 환율 (원/달러)</label>
-            <input type="number" step="0.1" id="fx-rate" value="1353.3" oninput="calculateAndRender()">
+            <label>💱 환율(원/달러)</label>
+            <input type="number" step="0.1" id="fx-rate" value="1353.3" oninput="renderAll()">
         </div>
     </div>
 
-    <!-- [탭 1] 스위치 1 설정 -->
-    <div id="tab-s1" class="tab-content active">
+    <!-- [탭 1] 잔고 & 일별기록 (스크린샷 동일 구현) -->
+    <div id="tab-balance" class="tab-content active">
         <div class="card">
-            <div class="card-title">🔵 스위치 1 상세 설정</div>
-            <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:15px;">
-                <div class="input-group"><label>총 회차</label><input type="number" id="s1-rounds" value="20" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>목표 하락률 (%)</label><input type="number" step="0.1" id="s1-drop" value="20" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>현재 진행 회차</label><input type="number" id="s1-curr" value="4" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>회당 수량 (주)</label><input type="number" id="s1-qty" value="10" oninput="calculateAndRender()" style="width:100%;"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- [탭 2] 스위치 2 설정 -->
-    <div id="tab-s2" class="tab-content">
-        <div class="card">
-            <div class="card-title" style="color:#d69e2e;">🟡 스위치 2 상세 설정</div>
-            <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:15px;">
-                <div class="input-group"><label>총 회차</label><input type="number" id="s2-rounds" value="15" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>목표 하락률 (%)</label><input type="number" step="0.1" id="s2-drop" value="15" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>현재 진행 회차</label><input type="number" id="s2-curr" value="2" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>회당 수량 (주)</label><input type="number" id="s2-qty" value="10" oninput="calculateAndRender()" style="width:100%;"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- [탭 3] 스위치 3 설정 -->
-    <div id="tab-s3" class="tab-content">
-        <div class="card">
-            <div class="card-title" style="color:#38a169;">🟢 스위치 3 상세 설정</div>
-            <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:15px;">
-                <div class="input-group"><label>총 회차</label><input type="number" id="s3-rounds" value="10" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>목표 하락률 (%)</label><input type="number" step="0.1" id="s3-drop" value="10" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>현재 진행 회차</label><input type="number" id="s3-curr" value="1" oninput="calculateAndRender()" style="width:100%;"></div>
-                <div class="input-group"><label>회당 수량 (주)</label><input type="number" id="s3-qty" value="10" oninput="calculateAndRender()" style="width:100%;"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- [탭 4] 결과보기 -->
-    <div id="tab-result" class="tab-content">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-            <div class="card">
-                <div class="card-title" style="color:#e53e3e;">🔴 통합 매수 LOC 주문 목록</div>
-                <div id="buy-orders-result"></div>
-            </div>
-            <div class="card">
-                <div class="card-title" style="color:#3182ce;">🔵 통합 매도 / 퉁치기 주문 목록</div>
-                <div id="sell-orders-result"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- [탭 5] 잔고 & 일별기록 -->
-    <div id="tab-history" class="tab-content">
-        <div class="card">
-            <div class="card-title">📊 스위치별 요약 및 환산 잔고</div>
             <table>
                 <thead>
                     <tr>
                         <th>기법명</th>
-                        <th>진행회차</th>
-                        <th>필요 예수금($)</th>
-                        <th>원화 환산액(₩)</th>
+                        <th>보유수량</th>
+                        <th>평균가($)</th>
+                        <th>잔여달러($)</th>
+                        <th>평가총합($)</th>
+                        <th>평가손익($)</th>
+                        <th>수익률</th>
+                        <th>초기자금($)</th>
                     </tr>
                 </thead>
-                <tbody id="balance-table-body">
-                    <!-- 자바스크립트 동적 삽입 -->
+                <tbody id="balance-tbody">
+                    <!-- 자바스크립트 렌더링 -->
                 </tbody>
             </table>
+
+            <!-- 원화 환산액 배너 -->
+            <div style="background:#f0fff4; border:1px solid #c6f6d5; padding:15px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap;">
+                <span id="krw-summary-text" style="font-weight:bold; color:#22543d; font-size:14px;">💱 원화 환산액 (₩1,353.3/$1) | 전일 대비: ▲ ₩4,715,235 (1.71%)</span>
+                <span id="total-krw-big" style="font-size:20px; font-weight:bold; color:#276749;">₩280,123,343</span>
+            </div>
+
             <button class="action-btn" onclick="recordDailyHistory()">💾 일별 잔고 클라우드 기록 저장</button>
         </div>
 
+        <!-- 일별 누적 히스토리 영역 -->
         <div class="card">
-            <div class="card-title">📈 일별 누적 히스토리 (Cloud Log)</div>
-            <div id="history-log-container">
-                <p style="text-align:center; color:#aaa;">저장된 기록이 없습니다.</p>
+            <div style="font-weight:bold; font-size:14px; margin-bottom:15px; color:#2d3748; display:flex; justify-content:space-between; align-items:center;">
+                <span>📋 일별 누적 히스토리</span>
+            </div>
+            <div id="history-container">
+                <p style="text-align:center; color:#aaa;">저장된 일별 기록이 없습니다.</p>
             </div>
         </div>
     </div>
 
-    <!-- [탭 6] 기법 관리 -->
+    <!-- [탭 2] 결과보기 (퉁치기 주문) -->
+    <div id="tab-result" class="tab-content">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+            <div class="card">
+                <div style="font-weight:bold; color:#e53e3e; margin-bottom:12px; border-bottom:2px solid #edf2f7; padding-bottom:6px;">🔴 통합 퉁치기 예약 매수 목록</div>
+                <div id="result-buy-list"></div>
+            </div>
+            <div class="card">
+                <div style="font-weight:bold; color:#3182ce; margin-bottom:12px; border-bottom:2px solid #edf2f7; padding-bottom:6px;">🔵 통합 퉁치기 예약 매도 목록</div>
+                <div id="result-sell-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- [탭 3] 기법 관리 (기법 추가 / 삭제 / 수정) -->
     <div id="tab-mgmt" class="tab-content">
-        <div class="card" style="text-align:center; padding:30px;">
-            <div class="card-title">⚙️ 시스템 클라우드 데이터 관리</div>
-            <p style="font-size:13px; color:#666; margin-bottom:20px;">현재 입력된 모든 스위치 설정과 기록을 Firebase 클라우드에 영구 동기화합니다.</p>
-            <button class="action-btn" style="background:#38a169; max-width:300px;" onclick="saveToCloud()">☁️ 클라우드 설정 전체 저장</button>
+        <div class="card">
+            <div style="font-weight:bold; font-size:14px; margin-bottom:15px; color:#2d3748;">⚙️ 매매기법 추가 및 관리</div>
+            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                <input type="text" id="new-tech-name" placeholder="추가할 기법명 (예: 신규기법)" style="padding:8px; border:1px solid #cbd5e0; border-radius:6px; flex:1;">
+                <button onclick="addTechnique()" style="padding:8px 16px; background:#3182ce; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">기법 추가</button>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>기법명</th>
+                        <th>기본 수량</th>
+                        <th>기본 평단($)</th>
+                        <th>잔여 달러($)</th>
+                        <th>초기 자금($)</th>
+                        <th>관리</th>
+                    </tr>
+                </thead>
+                <tbody id="mgmt-tbody"></tbody>
+            </table>
+            <button class="action-btn" style="background:#3182ce;" onclick="saveToCloud()">☁️ 클라우드 설정 전체 저장</button>
         </div>
     </div>
 </div>
 
 <script>
     document.getElementById('target-date').value = new Date().toISOString().split('T')[0];
+    window.techniques = [
+        { name: '스위치', qty: 40, avgPrice: 106.85, remainUsd: 68408.58, initialCapital: 60000 },
+        { name: '동파', qty: 186, avgPrice: 111.22, remainUsd: 58308.72, initialCapital: 60000 },
+        { name: '3쥐', qty: 54, avgPrice: 110.56, remainUsd: 44850.78, initialCapital: 60000 },
+        { name: '평그마', qty: 34, avgPrice: 105.45, remainUsd: 1873.81, initialCapital: 5000 }
+    ];
     window.appHistory = [];
 
     function openTab(tabId) {
@@ -277,77 +261,144 @@
         event.currentTarget.classList.add('active');
     }
 
-    function calculateAndRender() {
+    function updateTechniquesFromDOM() {
+        if (!window.techniques) return;
+        window.techniques.forEach((t, i) => {
+            let q = document.getElementById(`qty-${i}`);
+            let a = document.getElementById(`avg-${i}`);
+            let r = document.getElementById(`rem-${i}`);
+            let c = document.getElementById(`cap-${i}`);
+            if(q) t.qty = parseFloat(q.value) || 0;
+            if(a) t.avgPrice = parseFloat(a.value) || 0;
+            if(r) t.remainUsd = parseFloat(r.value) || 0;
+            if(c) t.initialCapital = parseFloat(c.value) || 0;
+        });
+    }
+
+    function renderAll() {
+        updateTechniquesFromDOM();
         let closePrice = parseFloat(document.getElementById('close-price').value) || 0;
         let fxRate = parseFloat(document.getElementById('fx-rate').value) || 1350;
-        if (closePrice <= 0) return;
 
-        let switches = [
-            { id: 's1', name: '스위치 1', rounds: parseInt(document.getElementById('s1-rounds').value)||1, drop: parseFloat(document.getElementById('s1-drop').value)||1, curr: parseInt(document.getElementById('s1-curr').value)||1, qty: parseInt(document.getElementById('s1-qty').value)||10 },
-            { id: 's2', name: '스위치 2', rounds: parseInt(document.getElementById('s2-rounds').value)||1, drop: parseFloat(document.getElementById('s2-drop').value)||1, curr: parseInt(document.getElementById('s2-curr').value)||1, qty: parseInt(document.getElementById('s2-qty').value)||10 },
-            { id: 's3', name: '스위치 3', rounds: parseInt(document.getElementById('s3-rounds').value)||1, drop: parseFloat(document.getElementById('s3-drop').value)||1, curr: parseInt(document.getElementById('s3-curr').value)||1, qty: parseInt(document.getElementById('s3-qty').value)||10 }
-        ];
-
+        let balanceHtml = '';
+        let mgmtHtml = '';
         let buyHtml = '';
         let sellHtml = '';
-        let balanceHtml = '';
-        let totalCash = 0;
 
-        switches.forEach(s => {
-            // 매수 공식 반영
-            let m1Price = closePrice * (1 - (s.drop / 100) / s.rounds * s.curr);
-            let m2Price = closePrice - 0.01;
+        let totalQty = 0;
+        let totalValUsd = 0;
+        let totalProfitUsd = 0;
+        let totalInitCap = 0;
+        let totalRemainUsd = 0;
 
-            // 매도 공식 반영
-            let s1Price = closePrice * (1 + (s.drop / 100) / s.rounds);
-            let s2Price = closePrice + 0.01;
+        window.techniques.forEach((t, i) => {
+            let evalTotal = t.qty * closePrice;
+            let costTotal = t.qty * t.avgPrice;
+            let profitUsd = evalTotal - costTotal;
+            let returnRate = costTotal > 0 ? (profitUsd / costTotal) * 100 : 0;
 
-            buyHtml += `<div style="padding:6px; border-bottom:1px solid #edf2f7; font-size:12px; font-weight:bold; color:#e53e3e;">[${s.name}] 매수① $${m1Price.toFixed(2)} (${s.qty}주)</div>`;
-            buyHtml += `<div style="padding:6px; border-bottom:1px solid #edf2f7; font-size:12px; font-weight:bold; color:#e53e3e;">[${s.name}] 매수②(초밀착) $${m2Price.toFixed(2)} (${s.qty}주)</div>`;
+            totalQty += t.qty;
+            totalValUsd += evalTotal;
+            totalProfitUsd += profitUsd;
+            totalInitCap += t.initialCapital;
+            totalRemainUsd += t.remainUsd;
 
-            sellHtml += `<div style="padding:6px; border-bottom:1px solid #edf2f7; font-size:12px; font-weight:bold; color:#3182ce;">[${s.name}] 매도① $${s1Price.toFixed(2)} (${s.qty}주)</div>`;
-            sellHtml += `<div style="padding:6px; border-bottom:1px solid #edf2f7; font-size:12px; font-weight:bold; color:#3182ce;">[${s.name}] 매도② $${s2Price.toFixed(2)} (${s.qty}주)</div>`;
+            let profitColor = profitUsd >= 0 ? '#e53e3e' : '#3182ce';
+            let profitArrow = profitUsd >= 0 ? '▲' : '▼';
 
-            let cashNeeded = (m1Price + m2Price) * s.qty;
-            totalCash += cashNeeded;
-            let krwVal = cashNeeded * fxRate;
-
+            // 잔고 테이블 행
             balanceHtml += `
                 <tr>
-                    <td><b>${s.name}</b></td>
-                    <td>${s.curr}회차</td>
-                    <td>$${cashNeeded.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                    <td>₩${Math.round(krwVal).toLocaleString()}</td>
+                    <td><b>${t.name}</b></td>
+                    <td><input type="number" id="qty-${i}" value="${t.qty}" oninput="renderAll()"></td>
+                    <td><input type="number" step="0.01" id="avg-${i}" value="${t.avgPrice}" oninput="renderAll()"></td>
+                    <td><input type="number" step="0.01" id="rem-${i}" value="${t.remainUsd}" oninput="renderAll()"></td>
+                    <td>$${evalTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td style="color:${profitColor}; font-weight:bold;">$${profitUsd.toFixed(2)}</td>
+                    <td style="color:${profitColor}; font-weight:bold;">${profitArrow}${Math.abs(returnRate).toFixed(1)}%</td>
+                    <td><input type="number" id="cap-${i}" value="${t.initialCapital}" oninput="renderAll()"></td>
                 </tr>
             `;
+
+            // 기법 관리 테이블 행
+            mgmtHtml += `
+                <tr>
+                    <td><b>${t.name}</b></td>
+                    <td>${t.qty}주</td>
+                    <td>$${t.avgPrice}</td>
+                    <td>$${t.remainUsd}</td>
+                    <td>$${t.initialCapital}</td>
+                    <td><button onclick="removeTechnique(${i})" style="background:#e53e3e; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">삭제</button></td>
+                </tr>
+            `;
+
+            // 결과보기 퉁치기 주문 계산
+            let buyPrice = closePrice * 0.98;
+            let sellPrice = closePrice * 1.02;
+            buyHtml += `<div style="padding:8px; border-bottom:1px solid #edf2f7; font-size:12px; font-weight:bold;">[${t.name}] LOC 매수 $${buyPrice.toFixed(2)} (${Math.max(1, Math.floor(t.qty*0.2))}주)</div>`;
+            sellHtml += `<div style="padding:8px; border-bottom:1px solid #edf2f7; font-size:12px; font-weight:bold;">[${t.name}] LOC 매도 $${sellPrice.toFixed(2)} (${Math.max(1, Math.floor(t.qty*0.2))}주)</div>`;
         });
 
-        document.getElementById('buy-orders-result').innerHTML = buyHtml;
-        document.getElementById('sell-orders-result').innerHTML = sellHtml;
-        document.getElementById('balance-table-body').innerHTML = balanceHtml;
+        let totalAvg = totalQty > 0 ? (totalValUsd / totalQty) : 0;
+        let totalReturn = totalInitCap > 0 ? (totalProfitUsd / totalInitCap) * 100 : 0;
+        let totalProfitColor = totalProfitUsd >= 0 ? '#e53e3e' : '#3182ce';
+
+        // 합계 행 추가
+        balanceHtml += `
+            <tr style="background:#f7fafc; font-weight:bold;">
+                <td>합계</td>
+                <td>${totalQty}</td>
+                <td>$${totalAvg.toFixed(2)}</td>
+                <td>$${totalRemainUsd.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td>$${totalValUsd.toLocaleString('en-US', {minimumFractionDigits: 2})}</td>
+                <td style="color:${totalProfitColor};">$${totalProfitUsd.toFixed(2)}</td>
+                <td style="color:${totalProfitColor};">${totalProfitUsd >= 0 ? '▲' : '▼'}${Math.abs(totalReturn).toFixed(1)}%</td>
+                <td>$${totalInitCap.toLocaleString()}</td>
+            </tr>
+        `;
+
+        document.getElementById('balance-tbody').innerHTML = balanceHtml;
+        document.getElementById('mgmt-tbody').innerHTML = mgmtHtml;
+        document.getElementById('result-buy-list').innerHTML = buyHtml;
+        document.getElementById('result-sell-list').innerHTML = sellHtml;
+
+        let totalKrw = totalValUsd * fxRate;
+        document.getElementById('total-krw-big').textContent = `₩${Math.round(totalKrw).toLocaleString()}`;
+        document.getElementById('krw-summary-text').textContent = `💱 원화 환산액 (₩${fxRate}/$1) | 평가총합: $${totalValUsd.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    }
+
+    function addTechnique() {
+        let name = document.getElementById('new-tech-name').value.trim();
+        if (!name) { alert('기법명을 입력하세요.'); return; }
+        window.techniques.push({ name: name, qty: 10, avgPrice: 100.0, remainUsd: 10000.0, initialCapital: 10000 });
+        document.getElementById('new-tech-name').value = '';
+        renderAll();
+    }
+
+    function removeTechnique(index) {
+        if(confirm(`"${window.techniques[index].name}" 기법을 삭제하시겠습니까?`)) {
+            window.techniques.splice(index, 1);
+            renderAll();
+        }
     }
 
     function recordDailyHistory() {
+        updateTechniquesFromDOM();
         let entry = {
             date: document.getElementById('target-date').value,
             closePrice: document.getElementById('close-price').value,
             fxRate: document.getElementById('fx-rate').value,
-            s1: document.getElementById('s1-curr').value,
-            s2: document.getElementById('s2-curr').value,
-            s3: document.getElementById('s3-curr').value,
+            techniques: JSON.parse(JSON.stringify(window.techniques)),
             timestamp: new Date().toLocaleString()
         };
-
         if(!window.appHistory) window.appHistory = [];
         window.appHistory.unshift(entry);
-        if(window.appHistory.length > 15) window.appHistory.pop();
-
         renderHistoryLogs();
         saveToCloud();
     }
 
     function renderHistoryLogs() {
-        const container = document.getElementById('history-log-container');
+        const container = document.getElementById('history-container');
         if (!window.appHistory || window.appHistory.length === 0) {
             container.innerHTML = `<p style="text-align:center; color:#aaa;">저장된 기록이 없습니다.</p>`;
             return;
@@ -355,10 +406,16 @@
 
         let html = '';
         window.appHistory.forEach(h => {
+            let sumQty = h.techniques.reduce((acc, t) => acc + t.qty, 0);
+            let sumVal = h.techniques.reduce((acc, t) => acc + (t.qty * h.closePrice), 0);
+            let sumKrw = sumVal * h.fxRate;
+            let details = h.techniques.map(t => `${t.name}: ${t.qty}주 (평단:$${t.avgPrice}, 총합:$${(t.qty*h.closePrice).toFixed(2)})`).join(' | ');
+
             html += `
-                <div style="background:#f7fafc; border:1px solid #e2e8f0; padding:10px; border-radius:6px; margin-bottom:8px; font-size:12px;">
-                    <b>📅 기록일: ${h.date}</b> (저장시각: ${h.timestamp})<br>
-                    종가: $${parseFloat(h.closePrice).toFixed(2)} | 환율: ₩${h.fxRate} | 스위치 진행회차 [1산: ${h.s1}회차, 2산: ${h.s2}회차, 3산: ${h.s3}회차]
+                <div style="background:#f7fafc; border:1px solid #e2e8f0; padding:12px; border-radius:6px; margin-bottom:10px; font-size:12px;">
+                    <b>📅 ${h.date} (종가: $${h.closePrice} | 환율: ₩${h.fxRate})</b><br>
+                    총 수량: ${sumQty}주 | 평가금액: $${sumVal.toFixed(2)} (₩${Math.round(sumKrw).toLocaleString()})<br>
+                    <span style="color:#666; font-size:11px;">기법별 내역: ${details}</span>
                 </div>
             `;
         });
