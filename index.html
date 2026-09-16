@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스위치 매매법 통합 시스템 (완전판)</title>
+    <title>통합 퉁치기 & 잔고 일별 기록 (스위치 매매법 연동)</title>
     
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK (App, Firestore, Auth) 불러오기 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -31,343 +31,1082 @@
         const provider = new GoogleAuthProvider();
 
         window.loginWithGoogle = async function() {
-            try { await signInWithPopup(auth, provider); } catch (e) { alert("로그인 실패: " + e.message); }
+            try {
+                await signInWithPopup(auth, provider);
+            } catch (error) {
+                alert("로그인 실패: " + error.message);
+            }
         };
-        window.logout = async function() { await signOut(auth); };
+
+        window.logout = async function() {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                console.error("로그아웃 실패", error);
+            }
+        };
 
         onAuthStateChanged(auth, async (user) => {
             const loginScreen = document.getElementById('login-screen');
             const appScreen = document.getElementById('app-screen');
+            const userEmailDisplay = document.getElementById('user-email-display');
+
             if (user) {
                 if (user.email !== OWNER_EMAIL) {
-                    alert(`접근 권한이 없습니다!\n계정: ${user.email}`);
+                    alert(`🚫 접근 권한이 없습니다!\n\n현재 계정: ${user.email}\n이 앱은 오직 지정된 관리자 계정만 사용할 수 있습니다.`);
                     await signOut(auth);
                     return;
                 }
+
                 loginScreen.style.display = 'none';
                 appScreen.style.display = 'block';
-                document.getElementById('user-email').textContent = `접속 계정: ${user.email}`;
-                await loadCloudData();
+                if(userEmailDisplay) userEmailDisplay.textContent = `접속 계정: ${user.email}`;
+
+                await loadCloudDataAndInit();
             } else {
                 loginScreen.style.display = 'flex';
                 appScreen.style.display = 'none';
             }
         });
 
-        async function loadCloudData() {
+        async function loadCloudDataAndInit() {
             try {
-                const docSnap = await getDoc(doc(db, "appData", "switchStrategyUnified"));
+                const docRef = doc(db, "appData", "stockUserConfig");
+                const docSnap = await getDoc(docRef);
+
                 if (docSnap.exists()) {
-                    let d = docSnap.data();
-                    if(d.closePrice) document.getElementById('close-price').value = d.closePrice;
-                    if(d.fxRate) document.getElementById('fx-rate').value = d.fxRate;
-                    if(d.totalCash) document.getElementById('total-cash').value = d.totalCash;
-                    if(d.totalRounds) document.getElementById('total-rounds').value = d.totalRounds;
-                    if(d.holdingsQty) document.getElementById('holdings-qty').value = d.holdingsQty;
-                    if(d.currentRound) document.getElementById('current-round').value = d.currentRound;
-                    if(d.gridStepQty) document.getElementById('grid-step-qty').value = d.gridStepQty;
+                    const cloudVal = docSnap.data();
+                    window.strategies = cloudVal.strategies || getDefaultStrategies();
+                    window.allData = cloudVal.allData || {};
+                    window.historyData = cloudVal.history || [];
+                } else {
+                    window.strategies = getDefaultStrategies();
+                    window.allData = {};
+                    window.historyData = [];
+                    await saveCloudDataInstant();
                 }
-            } catch (e) { console.error("데이터 로드 실패:", e); }
-            renderAll();
+            } catch (e) {
+                console.error("클라우드 로드 실패:", e);
+                window.strategies = getDefaultStrategies();
+                window.allData = {};
+                window.historyData = [];
+            }
+            window.initAppUI();
         }
 
-        window.saveToCloud = async function() {
+        window.saveCloudDataInstant = async function() {
             try {
-                await setDoc(doc(db, "appData", "switchStrategyUnified"), {
-                    closePrice: document.getElementById('close-price').value,
-                    fxRate: document.getElementById('fx-rate').value,
-                    totalCash: document.getElementById('total-cash').value,
-                    totalRounds: document.getElementById('total-rounds').value,
-                    holdingsQty: document.getElementById('holdings-qty').value,
-                    currentRound: document.getElementById('current-round').value,
-                    gridStepQty: document.getElementById('grid-step-qty').value,
-                    updatedAt: new Date().toISOString()
+                await setDoc(doc(db, "appData", "stockUserConfig"), {
+                    strategies: window.strategies,
+                    allData: window.allData,
+                    history: window.historyData
                 });
-                alert("모든 설정 및 상태 데이터가 클라우드에 안전하게 저장되었습니다.");
-            } catch (e) { alert("저장 실패: " + e.message); }
-        }
+            } catch (e) {
+                console.error("클라우드 저장 실패:", e);
+            }
+        };
+
+        window.db = db;
+        window.doc = doc;
+        window.setDoc = setDoc;
     </script>
 
     <style>
         * { box-sizing: border-box; }
-        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f5f7; margin: 0; padding: 20px; color: #333; display: flex; justify-content: center; }
-        #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 400px; text-align: center; position: absolute; top: 35vh; }
-        .google-btn { width: 100%; padding: 12px; background: #fff; border: 1px solid #cbd5e0; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        
-        #app-screen { display: none; width: 100%; max-width: 1100px; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 25px; }
-        
-        /* 탭 네비게이션 */
-        .tab-nav { display: flex; gap: 6px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .tab-btn { padding: 8px 16px; background: #edf2f7; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; color: #4a5568; }
-        .tab-btn.active { background: #3182ce; color: #fff; }
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: #f4f5f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
 
+        #login-screen {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 400px; text-align: center;
+        }
+        #login-screen h2 { color: #1a365d; margin-bottom: 10px; font-size: 22px; }
+        #login-screen p { color: #666; font-size: 13px; margin-bottom: 25px; }
+        .google-login-btn {
+            width: 100%; padding: 12px; background-color: #fff; border: 1px solid #cbd5e0; border-radius: 8px;
+            font-size: 15px; font-weight: bold; color: #4a5568; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02); transition: background 0.2s;
+        }
+        .google-login-btn:hover { background-color: #f7fafc; }
+
+        #app-screen { display: none; width: 100%; max-width: 980px; background-color: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 30px; }
+        .header { text-align: center; margin-bottom: 25px; position: relative; }
+        .header h1 { font-size: 24px; margin-bottom: 8px; color: #1a365d; }
+        .user-info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #666; background: #f7fafc; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; }
+        .logout-btn { background: none; border: 1px solid #cbd5e0; padding: 4px 8px; border-radius: 4px; cursor: pointer; color: #e53e3e; font-weight: bold; }
+        .logout-btn:hover { background: #fff5f5; }
+
+        .tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; flex-wrap: wrap; gap: 2px; }
+        .tab-btn { padding: 10px 15px; background: none; border: none; font-size: 13px; font-weight: bold; color: #888; cursor: pointer; text-align: center; }
+        .tab-btn.active { color: #2b6cb0; border-bottom: 3px solid #2b6cb0; margin-bottom: -2px; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
-        .global-bar { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; justify-content: center; flex-wrap: wrap; }
-        .input-group { display: flex; flex-direction: column; gap: 4px; }
-        .input-group label { font-size: 11px; font-weight: bold; color: #4a5568; }
-        .input-group input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 13px; font-weight: bold; width: 140px; }
+        .control-box { background-color: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 15px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .control-box label { font-size: 13px; font-weight: bold; color: #4a5568; }
+        .control-box input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 14px; outline: none; }
 
-        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-        .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 15px; }
+        .section-title { font-size: 15px; font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; }
+        .title-buy { color: #e53e3e; }
+        .title-buy::before { content: ""; display: inline-block; width: 3px; height: 15px; background-color: #e53e3e; margin-right: 8px; }
+        .title-sell { color: #3182ce; margin-top: 25px; }
+        .title-sell::before { content: ""; display: inline-block; width: 3px; height: 15px; background-color: #3182ce; margin-right: 8px; }
+        
+        .order-row { display: flex; align-items: center; margin-bottom: 10px; gap: 10px; }
+        .order-num { font-size: 12px; color: #aaa; width: 15px; text-align: center; }
+        .input-group { flex: 1; display: flex; gap: 10px; }
+        input[type="number"], input[type="date"], input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; text-align: center; font-size: 14px; outline: none; }
+        input:focus { border-color: #3182ce; }
+        
+        .moc-check { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 11px; color: #888; width: 30px; }
+        .delete-btn { background: none; border: none; color: #ccc; font-size: 20px; cursor: pointer; padding: 0 5px; line-height: 1; }
+        .delete-btn:hover { color: #e53e3e; }
+        
+        .add-btn { width: 100%; padding: 12px; background-color: #f8f9fa; border: 1px dashed #ccc; border-radius: 6px; color: #666; font-size: 13px; cursor: pointer; margin-top: 5px; }
+        .add-btn:hover { background-color: #f1f3f5; }
 
-        .excel-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; margin-top: 10px; }
-        .excel-table th, .excel-table td { border: 1px solid #cbd5e0; padding: 9px; }
-        .excel-table th { background: #edf2f7; color: #2d3748; }
-        .highlight-buy { background: #fffaf0; font-weight: bold; color: #c05621; }
-        .highlight-sell { background: #f0fff4; font-weight: bold; color: #276749; }
-        .action-btn { width: 100%; padding: 12px; background: #3182ce; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .execute-btn { width: 100%; padding: 16px; background-color: #2b6cb0; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .execute-btn:hover { background-color: #2c5282; }
+
+        .result-box { margin-top: 20px; padding: 20px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 8px; display: none; }
+        .dual-tables-container { display: flex; gap: 15px; align-items: flex-start; }
+        .order-column { flex: 1; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; min-height: 200px; }
+        .column-title { font-size: 14px; font-weight: bold; text-align: center; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 2px solid #edf2f7; }
+        .title-sell-col { color: #3182ce; }
+        .title-buy-col { color: #e53e3e; }
+
+        .order-card { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; margin-bottom: 5px; border-radius: 6px; font-size: 13px; font-weight: bold; border: 1px solid #cbd5e0; }
+        .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .dot-sell { background-color: #3182ce; }
+        .dot-buy { background-color: #e53e3e; }
+
+        .row-white { background: linear-gradient(to bottom, #ffffff 0%, #f7fafc 100%); }
+        .row-yellow { background: linear-gradient(to bottom, #fefce8 0%, #fef9c3 100%); border-color: #fde047; }
+        .empty-slot { text-align: center; color: #aaa; font-size: 12px; padding: 20px 0; }
+
+        .cash-needed-box { margin-top: 20px; background: #ebf8ff; border: 1px solid #90cdf4; border-radius: 6px; padding: 15px; font-size: 13px; color: #2b6cb0; line-height: 1.5; }
+        .cash-needed-box b { font-size: 15px; color: #1a365d; }
+
+        .balance-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #cbd5e0; table-layout: fixed; }
+        .balance-table th, .balance-table td { border: 1px solid #cbd5e0; padding: 6px 3px; text-align: center; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .balance-table th { background-color: #f7fafc; color: #4a5568; font-weight: bold; }
+        .balance-table tfoot td { background-color: #edf2f7; font-weight: bold; color: #1a365d; }
+        .balance-table input { width: 100%; height: 28px; padding: 2px 4px; border: 1px solid #cbd5e0; border-radius: 4px; text-align: center; font-size: 11px; background-color: #fff; }
+
+        .krw-summary-box { margin-top: 12px; background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 6px; padding: 12px 15px; font-size: 13px; color: #276749; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px; }
+        .krw-summary-box b { font-size: 15px; color: #22543d; }
+
+        .history-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+        .history-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #edf2f7; padding-bottom: 8px; margin-bottom: 10px; font-weight: bold; color: #2b6cb0; font-size: 14px; }
+        .history-body-grid { display: flex; gap: 20px; align-items: center; justify-content: space-between; }
+        .history-info-side { flex: 1; font-size: 13px; color: #4a5568; line-height: 1.6; }
+        .history-chart-side { display: flex; align-items: center; justify-content: center; padding-right: 10px; flex-shrink: 0; }
+        
+        .strat-manage-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; gap: 10px; align-items: center; }
     </style>
 </head>
 <body>
 
+<!-- 1. 구글 로그인 화면 -->
 <div id="login-screen">
-    <h2>🔒 보안 로그인</h2>
-    <p>관리자 계정으로만 접속 가능합니다.</p>
-    <button class="google-btn" onclick="loginWithGoogle()">구글 계정으로 로그인</button>
+    <h2>🔒 매매 일지 보안 로그인</h2>
+    <p>지정된 관리자 구글 계정으로만<br>접속할 수 있습니다.</p>
+    <button class="google-login-btn" onclick="loginWithGoogle()">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.19-1.84H9v3.48h4.84c-.21 1.12-.84 2.07-1.79 2.71v2.25h2.9c1.7-1.57 2.69-3.88 2.69-6.6z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.25c-.81.54-1.85.86-3.06.86-2.34 0-4.33-1.58-5.04-3.71H.95v2.32C2.43 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.96 10.72c-.18-.54-.28-1.12-.28-1.72s.1-1.18.28-1.72V4.96H.95C.35 6.15 0 7.52 0 9s.35 2.85.95 4.04l3.01-2.32z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0 5.48 0 2.43 2.02.95 4.96l3.01 2.32c.71-2.13 2.7-3.7 5.04-3.7z"/></svg>
+        구글 계정으로 로그인
+    </button>
 </div>
 
+<!-- 2. 실제 메인 앱 화면 -->
 <div id="app-screen">
-    <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; background:#f7fafc; padding:8px 12px; border-radius:6px; margin-bottom:15px;">
-        <span id="user-email">확인 중...</span>
-        <button onclick="logout()" style="background:none; border:1px solid #cbd5e0; padding:3px 8px; border-radius:4px; cursor:pointer; color:#e53e3e; font-weight:bold;">로그아웃</button>
+    <div class="user-info-bar">
+        <span id="user-email-display">접속 계정 확인 중...</span>
+        <button class="logout-btn" onclick="logout()">로그아웃</button>
     </div>
 
-    <!-- 탭 네비게이션 -->
-    <div class="tab-nav">
-        <button class="tab-btn active" onclick="openTab('tab-s1', this)">📈 스위치 1번 매매법</button>
-        <button class="tab-btn" onclick="openTab('tab-tuck', this)">🔄 퉁치기 결과보기</button>
-        <button class="tab-btn" onclick="openTab('tab-history', this)">📊 잔고 & 일별기록</button>
-        <button class="tab-btn" onclick="openTab('tab-mgmt', this)">⚙️ 기법 관리</button>
+    <div class="header">
+        <h1>통합 퉁치기 & 잔고 일별 기록</h1>
+        <p>클라우드 보안 실시간 동기화 시스템 (스위치 매매법 연동)</p>
     </div>
 
-    <!-- 공통 기준 바 -->
-    <div class="global-bar">
-        <div class="input-group">
-            <label>📅 기준 날짜</label>
-            <input type="date" id="target-date">
-        </div>
-        <div class="input-group">
-            <label>💵 전일 종가 ($)</label>
-            <input type="number" step="0.01" id="close-price" value="102.32" oninput="renderAll()">
-        </div>
-        <div class="input-group">
-            <label>💱 환율 (원/달러)</label>
-            <input type="number" step="0.1" id="fx-rate" value="1353.3" oninput="renderAll()">
-        </div>
-    </div>
-
-    <!-- [탭 1] 스위치 1번 매매법 -->
-    <div id="tab-s1" class="tab-content active">
-        <div class="card" style="border-left: 4px solid #3182ce;">
-            <div style="font-weight:bold; font-size:15px; color:#2b6cb0; margin-bottom:12px;">
-                ⚙️ [1번 기법] 상태 파라미터 자유 설정 (0회차 리셋 가능)
-            </div>
-
-            <div class="input-grid">
-                <div class="input-group">
-                    <label>💰 총 예수금 ($)</label>
-                    <input type="number" step="0.01" id="total-cash" value="24000" oninput="renderAll()">
-                </div>
-                <div class="input-group">
-                    <label>🔄 전체 매수 회차</label>
-                    <input type="number" id="total-rounds" value="16" oninput="renderAll()">
-                </div>
-                <div class="input-group">
-                    <label>📦 현재 보유 수량 (주)</label>
-                    <input type="number" id="holdings-qty" value="0" oninput="renderAll()">
-                </div>
-                <div class="input-group">
-                    <label>📊 현재 진행 회차</label>
-                    <input type="number" id="current-round" value="0" oninput="renderAll()">
-                </div>
-                <div class="input-group">
-                    <label>🧱 하락 그리드 단위 수량 (주)</label>
-                    <input type="number" id="grid-step-qty" value="1" oninput="renderAll()">
-                </div>
-            </div>
-
-            <div style="display:flex; gap:20px; background:#edf2f7; padding:10px; border-radius:6px; font-size:12px; font-weight:bold; color:#2d3748; flex-wrap:wrap;">
-                <div>📊 1회차 배정 매수금: <span id="info-round-budget" style="color:#2b6cb0;">$0.00</span></div>
-                <div>📉 최대 하락 방어 폭: <span style="color:#e53e3e;">-20.0%</span></div>
-                <div>💱 원화 환산 총평가액: <span id="info-krw-val" style="color:#276749;">₩0</span></div>
-            </div>
-        </div>
-
-        <div class="card">
-            <div style="font-weight:bold; font-size:14px; margin-bottom:10px; color:#2d3748;">
-                📋 당일(오늘) 실행해야 할 LOC 주문 제안 표 (실시간 연동)
-            </div>
-            <table class="excel-table">
-                <thead>
-                    <tr>
-                        <th>구분</th>
-                        <th>주문 유형</th>
-                        <th>목표 가격 ($)</th>
-                        <th>주문 수량 (주)</th>
-                        <th>예상 금액 ($)</th>
-                        <th>전략 설명</th>
-                    </tr>
-                </thead>
-                <tbody id="simulation-tbody">
-                    <!-- 자바스크립트로 동적 렌더링 -->
-                </tbody>
-            </table>
-
-            <button class="action-btn" onclick="saveToCloud()">💾 1번 기법 현재 상태 클라우드 저장</button>
-        </div>
-    </div>
-
-    <!-- [탭 2] 퉁치기 결과보기 -->
-    <div id="tab-tuck" class="tab-content">
-        <div class="card">
-            <div style="font-weight:bold; font-size:14px; color:#2b6cb0; margin-bottom:10px;">🔄 퉁치기(수익실현 및 분할 매도) 시뮬레이션</div>
-            <p style="font-size:13px; color:#666;">현재 보유 중인 물량을 현재 회차 기준으로 균등 분할하여 전일 종가에 익절/퉁치기 할 때의 예상 결과를 확인합니다.</p>
-            <div id="tuck-result-box" style="background:#f7fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; font-size:13px; margin-top:15px;">
-                <!-- 동적 렌더링 -->
-            </div>
-        </div>
-    </div>
-
-    <!-- [탭 3] 잔고 & 일별기록 -->
-    <div id="tab-history" class="tab-content">
-        <div class="card">
-            <div style="font-weight:bold; font-size:14px; color:#2b6cb0; margin-bottom:10px;">📊 잔고 및 일별 매매 기록</div>
-            <p style="font-size:13px; color:#666;">날짜별 예수금 변동 및 자산 추이를 기록하고 관리하는 공간입니다.</p>
-            <table class="excel-table" style="margin-top:15px;">
-                <thead>
-                    <tr>
-                        <th>날짜</th>
-                        <th>전일 종가 ($)</th>
-                        <th>총 예수금 ($)</th>
-                        <th>보유 수량</th>
-                        <th>진행 회차</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td id="history-date">-</td>
-                        <td id="history-close">-</td>
-                        <td id="history-cash">-</td>
-                        <td id="history-holdings">-</td>
-                        <td id="history-round">-</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- [탭 4] 기법 관리 -->
-    <div id="tab-mgmt" class="tab-content">
-        <div class="card">
-            <div style="font-weight:bold; font-size:14px; color:#2b6cb0; margin-bottom:10px;">⚙️ 기법 관리 및 확장 설정</div>
-            <p style="font-size:13px; color:#666;">추가적인 스위치 매매법 알고리즘 파라미터 및 시스템 환율 연동 설정을 관리합니다.</p>
-        </div>
-    </div>
+    <div class="tabs" id="tab-buttons"></div>
+    <div id="tab-contents"></div>
 </div>
 
 <script>
-    document.getElementById('target-date').value = new Date().toISOString().split('T')[0];
+    window.strategies = [];
+    window.allData = {};
+    window.historyData = [];
+    const chartColors = ['#2b6cb0', '#e53e3e', '#d69e2e', '#38a169', '#805ad5', '#319795', '#dd6b20'];
 
-    function openTab(tabId, btn) {
-        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        document.getElementById(tabId).classList.add('active');
-        btn.classList.add('active');
+    function getDefaultStrategies() {
+        return [
+            { id: 'strat1', name: '스위치', defaultMult: 1, defaultCash: 24000, defaultShares: 0, defaultAvg: 0, defaultInit: 24000, switchParams: { closePrice: 102.32, totalCash: 24000, totalRounds: 16, holdingsQty: 0, currentRound: 0, gridStepQty: 1 } },
+            { id: 'strat2', name: '동파', defaultMult: 6, defaultCash: 68490.00, defaultShares: 90, defaultAvg: 125.87, defaultInit: 60000 },
+            { id: 'strat3', name: '3쥐', defaultMult: 6, defaultCash: 49428.00, defaultShares: 12, defaultAvg: 123.31, defaultInit: 60000 },
+            { id: 'strat4', name: '펑그마', defaultMult: 1, defaultCash: 5310.41, defaultShares: 1, defaultAvg: 108.89, defaultInit: 5000 },
+            { id: 'strat5', name: '방어', defaultMult: 1, defaultCash: 50000.00, defaultShares: 0, defaultAvg: 0, defaultInit: 50000 }
+        ];
     }
 
-    function renderAll() {
-        let closePrice = parseFloat(document.getElementById('close-price').value) || 0;
-        let fxRate = parseFloat(document.getElementById('fx-rate').value) || 1350;
-        let totalCash = parseFloat(document.getElementById('total-cash').value) || 0;
-        let totalRounds = parseInt(document.getElementById('total-rounds').value) || 16;
-        let holdingsQty = parseFloat(document.getElementById('holdings-qty').value) || 0;
-        let currentRound = parseInt(document.getElementById('current-round').value) || 0;
-        let gridStepQty = parseInt(document.getElementById('grid-step-qty').value) || 1;
+    let saveTimeout = null;
+    function saveData() {
+        collectCurrentUIInputs();
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            window.saveCloudDataInstant();
+        }, 500);
+    }
 
-        // 1회차 배정 매수금 계산
-        let roundBudget = totalCash / totalRounds;
-        document.getElementById('info-round-budget').textContent = `$${roundBudget.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+    function collectCurrentUIInputs() {
+        window.strategies.forEach(strat => {
+            let dateEl = document.getElementById(`date-${strat.id}`);
+            let multEl = document.getElementById(`mult-${strat.id}`);
+            if(!dateEl) return;
+            let dateVal = dateEl.value;
+            let multVal = multEl ? (parseFloat(multEl.value) || 1) : 1;
+            
+            let buys = [];
+            document.querySelectorAll(`#buy-container-${strat.id} .order-row`).forEach(row => {
+                let p = row.querySelector('.buy-price').value;
+                let q = row.querySelector('.buy-qty').value;
+                if(p !== '' || q !== '') {
+                    buys.push({ price: p, qty: q });
+                }
+            });
 
-        let totalValUsd = holdingsQty > 0 ? holdingsQty * closePrice : totalCash;
-        let totalKrw = totalValUsd * fxRate;
-        document.getElementById('info-krw-val').textContent = `₩${Math.round(totalKrw).toLocaleString()}`;
+            let sells = [];
+            document.querySelectorAll(`#sell-container-${strat.id} .order-row`).forEach(row => {
+                let p = row.querySelector('.sell-price').value;
+                let q = row.querySelector('.sell-qty').value;
+                let m = row.querySelector('.sell-moc').checked;
+                if(p !== '' || q !== '' || m) {
+                    sells.push({ price: p, qty: q, isMoc: m });
+                }
+            });
 
-        let tbodyHtml = '';
+            let switchParams = null;
+            if (strat.id === 'strat1' || strat.name === '스위치') {
+                switchParams = {
+                    closePrice: document.getElementById(`sw-close-${strat.id}`) ? document.getElementById(`sw-close-${strat.id}`).value : '',
+                    totalCash: document.getElementById(`sw-cash-${strat.id}`) ? document.getElementById(`sw-cash-${strat.id}`).value : '',
+                    totalRounds: document.getElementById(`sw-rounds-${strat.id}`) ? document.getElementById(`sw-rounds-${strat.id}`).value : '',
+                    holdingsQty: document.getElementById(`sw-holdings-${strat.id}`) ? document.getElementById(`sw-holdings-${strat.id}`).value : '',
+                    currentRound: document.getElementById(`sw-current-round-${strat.id}`) ? document.getElementById(`sw-current-round-${strat.id}`).value : '',
+                    gridStepQty: document.getElementById(`sw-grid-qty-${strat.id}`) ? document.getElementById(`sw-grid-qty-${strat.id}`).value : ''
+                };
+            }
 
-        if (holdingsQty === 0 || currentRound === 0) {
-            // [0회차 / 무물량 상태] 전일 종가 +10% 공격적 LOC 매수
-            let buyPrice = closePrice * 1.10;
-            let buyQty = Math.floor(roundBudget / buyPrice);
-            let estCost = buyQty * buyPrice;
+            if (buys.length > 0 || sells.length > 0 || switchParams) {
+                if(!window.allData[dateVal]) window.allData[dateVal] = {};
+                window.allData[dateVal][strat.id] = { mult: multVal, buys: buys, sells: sells, switchParams: switchParams };
+            }
+        });
+    }
 
-            tbodyHtml += `
-                <tr>
-                    <td class="highlight-buy">0회차 (신규/리셋)</td>
-                    <td>LOC 매수</td>
-                    <td style="color:#e53e3e; font-weight:bold;">$${buyPrice.toFixed(2)} (+10%)</td>
-                    <td style="font-weight:bold; font-size:14px;">${buyQty} 주</td>
-                    <td>$${estCost.toFixed(2)}</td>
-                    <td style="text-align:left; padding-left:10px; font-size:12px; color:#4a5568;">보유 물량이 없어 전일 종가 대비 +10% 상단에 1회차 자금으로 공격적 LOC 매수</td>
-                </tr>
-            `;
-        } else {
-            // [보유 중 / N회차 진행 상태] 퉁치기 매도 목표
-            let sellQtyPerRound = Math.round(holdingsQty / currentRound);
-            tbodyHtml += `
-                <tr>
-                    <td class="highlight-sell">${currentRound}회차 보유중</td>
-                    <td>LOC 매도 (퉁치기/익절)</td>
-                    <td style="color:#276749; font-weight:bold;">$${closePrice.toFixed(2)} (전일 종가)</td>
-                    <td style="font-weight:bold; font-size:14px;">${sellQtyPerRound} 주</td>
-                    <td>$${(sellQtyPerRound * closePrice).toFixed(2)}</td>
-                    <td style="text-align:left; padding-left:10px; font-size:12px; color:#4a5568;">총 보유량(${holdingsQty}주)을 현재 회차(${currentRound}회)로 나눈 분할 수량 매도</td>
-                </tr>
-            `;
-        }
+    window.initAppUI = function() {
+        const tabBtns = document.getElementById('tab-buttons');
+        const tabContents = document.getElementById('tab-contents');
 
-        // 하락 추가 매수 그리드 (-4% ~ -20% 구간, 사용자가 지정한 단위 수량 gridStepQty 적용)
-        let dropSteps = [
-            { pct: -4.0, label: '추가 1단계' },
-            { pct: -8.0, label: '추가 2단계' },
-            { pct: -12.0, label: '추가 3단계' },
-            { pct: -16.0, label: '추가 4단계' },
-            { pct: -20.0, label: '추가 5단계 (최종방어)' }
-        ];
+        tabBtns.innerHTML = '';
+        tabContents.innerHTML = '';
 
-        dropSteps.forEach(step => {
-            let stepPrice = closePrice * (1 + step.pct / 100);
-            let stepCost = stepPrice * gridStepQty;
-            tbodyHtml += `
-                <tr>
-                    <td>하락 방어 그리드</td>
-                    <td>LOC 추가매수</td>
-                    <td>$${stepPrice.toFixed(2)} (${step.pct}%)</td>
-                    <td style="font-weight:bold;">${gridStepQty} 주</td>
-                    <td>$${stepCost.toFixed(2)}</td>
-                    <td style="text-align:left; padding-left:10px; font-size:12px; color:#718096;">전일 종가 대비 ${step.pct}% 하락 지점 사용자 설정 단위(${gridStepQty}주) 추가 매수 예약</td>
-                </tr>
+        window.strategies.forEach((strat, index) => {
+            tabBtns.innerHTML += `<button class="tab-btn ${index === 0 ? 'active' : ''}" onclick="switchTab(${index})">${strat.name}</button>`;
+
+            let controlBoxHtml = '';
+            if (strat.id === 'strat1' || strat.name === '스위치') {
+                controlBoxHtml = `
+                    <div class="control-box" style="flex-direction: column; align-items: stretch; gap: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div><label>📅 기준 날짜</label><input type="date" id="date-${strat.id}" onchange="onDateOrDataChanged('${strat.id}')" style="width:140px; margin-left:8px;"></div>
+                            <div style="display:flex; align-items:center; gap:5px;">
+                                <label>⚙️ 수량 배율</label>
+                                <input type="number" id="mult-${strat.id}" value="${strat.defaultMult}" min="1" oninput="saveData()" style="width:60px;">
+                                <span style="font-size:13px; color:#666; font-weight:bold;">배</span>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 5px; padding-top: 8px; border-top: 1px dashed #cbd5e0;">
+                            <div>
+                                <label style="font-size:11px;">💵 전일 종가($)</label>
+                                <input type="number" step="0.01" id="sw-close-${strat.id}" value="102.32" oninput="saveData()" style="width:100%;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;">💰 총 예수금($)</label>
+                                <input type="number" step="0.01" id="sw-cash-${strat.id}" value="24000" oninput="saveData()" style="width:100%;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;">🔄 전체 회차</label>
+                                <input type="number" id="sw-rounds-${strat.id}" value="16" oninput="saveData()" style="width:100%;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;">📦 보유 수량(주)</label>
+                                <input type="number" id="sw-holdings-${strat.id}" value="0" oninput="saveData()" style="width:100%;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;">📊 현재 회차</label>
+                                <input type="number" id="sw-current-round-${strat.id}" value="0" oninput="saveData()" style="width:100%;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px;">🧱 그리드 단위(주)</label>
+                                <input type="number" id="sw-grid-qty-${strat.id}" value="1" oninput="saveData()" style="width:100%;">
+                            </div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:#ebf8ff; padding:8px 12px; border-radius:6px; font-size:12px; color:#2b6cb0;">
+                            <span>📊 1회차 배정 매수금: <b id="sw-budget-display-${strat.id}">$0.00</b></span>
+                            <button onclick="applySwitchStrategyAutoOrders('${strat.id}')" style="background:#3182ce; color:#fff; border:none; padding:5px 10px; border-radius:4px; font-weight:bold; cursor:pointer; font-size:12px;">⚡ 스위치 규칙으로 주문 자동생성</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                controlBoxHtml = `
+                    <div class="control-box">
+                        <div>
+                            <label>📅 기준 날짜</label>
+                            <input type="date" id="date-${strat.id}" onchange="onDateOrDataChanged('${strat.id}')" style="width:140px; margin-left:8px;">
+                        </div>
+                        <div style="display:flex; align-items:center; gap:5px;">
+                            <label>⚙️ 수량 배율</label>
+                            <input type="number" id="mult-${strat.id}" value="${strat.defaultMult}" min="1" oninput="saveData()" style="width:60px;">
+                            <span style="font-size:13px; color:#666; font-weight:bold;">배</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            tabContents.innerHTML += `
+                <div class="tab-content ${index === 0 ? 'active' : ''}" id="content-${index}">
+                    ${controlBoxHtml}
+
+                    <div class="section-title title-buy">매수 주문 (LOC) (${strat.name})</div>
+                    <div style="display: flex; padding-left: 35px; margin-bottom: 5px; font-size: 12px; color: #888; text-align: center; padding-right: 35px;">
+                        <div style="flex: 1;">가격 ($)</div>
+                        <div style="flex: 1;">수량</div>
+                    </div>
+                    <div id="buy-container-${strat.id}"></div>
+                    <button class="add-btn" onclick="addRow('${strat.id}', 'buy')">+ 매수 추가</button>
+
+                    <div class="section-title title-sell">매도 주문 (LOC / MOC) (${strat.name})</div>
+                    <div style="display: flex; padding-left: 35px; margin-bottom: 5px; font-size: 12px; color: #888; text-align: center; padding-right: 35px;">
+                        <div style="flex: 1;">가격 ($)</div>
+                        <div style="flex: 1;">수량</div>
+                        <div style="width: 30px; margin-left:10px;">MOC</div>
+                    </div>
+                    <div id="sell-container-${strat.id}"></div>
+                    <button class="add-btn" onclick="addRow('${strat.id}', 'sell')">+ 매도 추가</button>
+                    
+                    <div style="margin-top: 15px;">
+                        <button class="execute-btn" onclick="saveStrategyDailyOrders('${strat.id}')" style="background-color:#38a169; padding: 12px; font-size: 14px;">💾 ${strat.name} 현재 날짜 주문 클라우드 저장</button>
+                    </div>
+                </div>
             `;
         });
 
-        document.getElementById('simulation-tbody').innerHTML = tbodyHtml;
+        const resIdx = window.strategies.length;
+        const balIdx = window.strategies.length + 1;
+        const setIdx = window.strategies.length + 2;
 
-        // 퉁치기 탭 데이터 동기화
-        let tuckHtml = `
-            <b>현재 진행 회차:</b> ${currentRound}회차<br>
-            <b>현재 보유 수량:</b> ${holdingsQty}주<br>
-            <b>회차별 분할 매도 수량:</b> ${currentRound > 0 ? Math.round(holdingsQty / currentRound) : 0}주 / 회<br>
-            <b>전일 종가 기준 매도 시 총 예상금액:</b> $${(holdingsQty * closePrice).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+        tabBtns.innerHTML += `<button class="tab-btn" onclick="switchTab(${resIdx})" style="color:#e53e3e;">📊 결과보기</button>`;
+        tabContents.innerHTML += `
+            <div class="tab-content" id="content-${resIdx}">
+                <h2 style="font-size:16px; margin-bottom:15px; text-align:center; color:#1a365d;">✨ 동일 날짜 기준 통합 퉁치기</h2>
+                <div class="control-box" style="justify-content: center; gap: 15px; margin-bottom: 15px;">
+                    <label>조회할 날짜 선택:</label>
+                    <input type="date" id="target-calc-date" onchange="calculateTotalNet()" style="width:150px;">
+                </div>
+                <button class="execute-btn" onclick="calculateTotalNet()" style="margin-bottom: 15px;">선택 날짜 기준 퉁치기 실행</button>
+                <div class="result-box" id="final-result-box">
+                    <div class="dual-tables-container">
+                        <div class="order-column"><div class="column-title title-sell-col">🔵 매도 순주문 (LOC/MOC)</div><div id="sell-result-list"></div></div>
+                        <div class="order-column"><div class="column-title title-buy-col">🔴 매수 순주문 (LOC)</div><div id="buy-result-list"></div></div>
+                    </div>
+                    <div id="cash-needed-display"></div>
+                </div>
+                <hr style="margin: 25px 0; border:0; border-top:1px solid #eee;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="font-size:15px; color:#1a365d; margin:0;">📋 기법별 입력된 주문 내역 히스토리</h3>
+                    <button onclick="toggleStratHistoryViewMode()" id="strat-history-toggle-btn" style="padding: 5px 10px; font-size:12px; background:#edf2f7; border:1px solid #cbd5e0; border-radius:4px; cursor:pointer;">조회일만 보기 전환</button>
+                </div>
+                <div id="strat-input-history-container"></div>
+            </div>
         `;
-        document.getElementById('tuck-result-box').innerHTML = tuckHtml;
 
-        // 잔고 탭 동기화
-        document.getElementById('history-date').textContent = document.getElementById('target-date').value;
-        document.getElementById('history-close').textContent = `$${closePrice.toFixed(2)}`;
-        document.getElementById('history-cash').textContent = `$${totalCash.toLocaleString()}`;
-        document.getElementById('history-holdings').textContent = `${holdingsQty}주`;
-        document.getElementById('history-round').textContent = `${currentRound}회차`;
+        tabBtns.innerHTML += `<button class="tab-btn" onclick="switchTab(${balIdx})" style="color:#2b6cb0;">📈 잔고&일별기록</button>`;
+        tabContents.innerHTML += `
+            <div class="tab-content" id="content-${balIdx}">
+                <div class="control-box" style="justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div><label>📅 기록 날짜</label><input type="date" id="record-date" onchange="updateBalanceLive()" style="width:130px; margin-left:5px;"></div>
+                    <div style="display:flex; gap:15px; align-items:center;">
+                        <div><label>💵 당일 종가($)</label><input type="number" step="0.01" id="record-close-price" value="125.87" oninput="updateBalanceLive()" style="width:80px; margin-left:5px;"></div>
+                        <div><label>💱 환율(원/달러)</label><input type="number" step="0.01" id="record-exchange-rate" value="1350.00" oninput="updateBalanceLive()" style="width:90px; margin-left:5px;"></div>
+                    </div>
+                </div>
+                <table class="balance-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 12%;">기법명</th><th style="width: 11%;">보유수량</th><th style="width: 12%;">평균가($)</th><th style="width: 15%;">잔여달러($)</th>
+                            <th style="width: 15%;">평가총합($)</th><th style="width: 13%;">평가손익($)</th><th style="width: 10%;">수익률</th><th style="width: 12%;">초기자금($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="balance-tbody"></tbody>
+                    <tfoot id="balance-tfoot"></tfoot>
+                </table>
+                <div id="krw-summary-display"></div>
+                <div style="margin-top:15px; display:flex; gap:10px; align-items:center;">
+                    <button class="execute-btn" onclick="saveDailyRecord()" style="background-color:#38a169; flex:1; margin-top:0;">💾 일별 잔고 클라우드 기록 저장</button>
+                </div>
+                <hr style="margin: 25px 0; border:0; border-top:1px solid #eee;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 style="font-size:15px; color:#1a365d; margin:0;">📜 일별 누적 히스토리</h3>
+                    <button onclick="toggleBalanceHistoryViewMode()" id="balance-history-toggle-btn" style="padding: 5px 10px; font-size:12px; background:#edf2f7; border:1px solid #cbd5e0; border-radius:4px; cursor:pointer;">조회일만 보기 전환</button>
+                </div>
+                <div id="history-container"></div>
+            </div>
+        `;
+
+        tabBtns.innerHTML += `<button class="tab-btn" onclick="switchTab(${setIdx})" style="color:#d69e2e;">⚙️ 기법 관리</button>`;
+        tabContents.innerHTML += `
+            <div class="tab-content" id="content-${setIdx}">
+                <h2 style="font-size:16px; margin-bottom:15px; text-align:center; color:#1a365d;">⚙️ 매매기법 관리</h2>
+                <div id="strategy-manage-list"></div>
+                <div style="display:flex; gap:10px; margin-top:15px;">
+                    <input type="text" id="new-strat-name" placeholder="추가할 새 기법 이름 입력" style="flex:1;">
+                    <button class="execute-btn" onclick="addNewStrategy()" style="width:150px; padding:10px; background-color:#38a169;">+ 기법 추가</button>
+                </div>
+                <button class="execute-btn" onclick="resetAllData()" style="background-color:#e53e3e; margin-top:30px;">전체 초기화</button>
+            </div>
+        `;
+
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+        window.strategies.forEach(strat => {
+            let dateInput = document.getElementById(`date-${strat.id}`);
+            if(dateInput) dateInput.value = todayStr;
+        });
+        if(document.getElementById('target-calc-date')) document.getElementById('target-calc-date').value = todayStr;
+        if(document.getElementById('record-date')) document.getElementById('record-date').value = todayStr;
+
+        loadDataForDate(null);
+        renderStrategyManageList();
+        renderBalanceTable();
+        renderHistoryList();
+    };
+
+    window.switchTab = function(index) {
+        document.querySelectorAll('.tab-btn').forEach((btn, idx) => btn.classList.toggle('active', idx === index));
+        document.querySelectorAll('.tab-content').forEach((content, idx) => content.classList.toggle('active', idx === index));
+        let balIdx = window.strategies.length + 1;
+        let resIdx = window.strategies.length;
+        if (index === balIdx) renderBalanceTable();
+        if (index === resIdx) calculateTotalNet();
+    };
+
+    window.addRow = function(stratId, type, price = '', qty = '', isMoc = false) {
+        const container = document.getElementById(`${type}-container-${stratId}`);
+        if(!container) return;
+        const isSell = type === 'sell';
+        
+        const row = document.createElement('div');
+        row.className = 'order-row';
+        row.innerHTML = `
+            <div class="order-num"></div>
+            <div class="input-group">
+                <input type="number" step="0.01" class="${type}-price" placeholder="가격" value="${price}" oninput="saveData()">
+                <input type="number" class="${type}-qty" placeholder="수량" value="${qty}" oninput="saveData()">
+            </div>
+            ${isSell ? `<div class="moc-check"><input type="checkbox" class="sell-moc" ${isMoc ? 'checked' : ''} onchange="saveData()"></div>` : ''}
+            <button class="delete-btn" onclick="removeRow(this, '${stratId}', '${type}')">×</button>
+        `;
+        container.appendChild(row);
+        updateRowNumbers(stratId, type);
+        if(price === '' && qty === '') saveData();
+    };
+
+    window.removeRow = function(button, stratId, type) {
+        button.closest('.order-row').remove();
+        updateRowNumbers(stratId, type);
+        saveData();
+    };
+
+    function updateRowNumbers(stratId, type) {
+        const rows = document.querySelectorAll(`#${type}-container-${stratId} .order-row`);
+        rows.forEach((row, index) => row.querySelector('.order-num').textContent = index + 1);
+    }
+
+    window.applySwitchStrategyAutoOrders = function(stratId) {
+        let closePrice = parseFloat(document.getElementById(`sw-close-${stratId}`).value) || 102.32;
+        let totalCash = parseFloat(document.getElementById(`sw-cash-${stratId}`).value) || 24000;
+        let totalRounds = parseInt(document.getElementById(`sw-rounds-${stratId}`).value) || 16;
+        let holdingsQty = parseFloat(document.getElementById(`sw-holdings-${stratId}`).value) || 0;
+        let currentRound = parseInt(document.getElementById(`sw-current-round-${stratId}`).value) || 0;
+        let gridStepQty = parseInt(document.getElementById(`sw-grid-qty-${stratId}`).value) || 1;
+
+        let roundBudget = totalCash / totalRounds;
+        let budgetEl = document.getElementById(`sw-budget-display-${stratId}`);
+        if(budgetEl) budgetEl.textContent = `$${roundBudget.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+        const buyContainer = document.getElementById(`buy-container-${stratId}`);
+        const sellContainer = document.getElementById(`sell-container-${stratId}`);
+        if(!buyContainer || !sellContainer) return;
+
+        buyContainer.innerHTML = '';
+        sellContainer.innerHTML = '';
+
+        // 스위치 매수 주문 구성
+        let buys = [];
+        if (holdingsQty === 0 || currentRound === 0) {
+            let buyPrice = closePrice * 1.10;
+            let buyQty = Math.floor(roundBudget / buyPrice);
+            if (buyQty > 0) buys.push({ price: buyPrice.toFixed(2), qty: buyQty });
+        }
+
+        // 하락 방어 그리드 (-4% ~ -20%)
+        let dropSteps = [-4.0, -8.0, -12.0, -16.0, -20.0];
+        dropSteps.forEach(pct => {
+            let stepPrice = closePrice * (1 + pct / 100);
+            buys.push({ price: stepPrice.toFixed(2), qty: gridStepQty });
+        });
+
+        buys.forEach(b => window.addRow(stratId, 'buy', b.price, b.qty));
+        for(let i=buys.length; i<3; i++) window.addRow(stratId, 'buy');
+
+        // 스위치 매도 주문 구성 (퉁치기)
+        let sells = [];
+        if (holdingsQty > 0 && currentRound > 0) {
+            let sellQtyPerRound = Math.round(holdingsQty / currentRound);
+            if (sellQtyPerRound > 0) {
+                sells.push({ price: closePrice.toFixed(2), qty: sellQtyPerRound, isMoc: false });
+            }
+        }
+
+        if (sells.length > 0) {
+            sells.forEach(s => window.addRow(stratId, 'sell', s.price, s.qty, s.isMoc));
+        }
+        for(let i=sells.length; i<3; i++) window.addRow(stratId, 'sell');
+
+        saveData();
+        alert("스위치 매매법 규칙에 따라 오늘의 주문이 자동으로 생성 및 적용되었습니다.");
+    };
+
+    function loadDataForDate(stratIdTarget) {
+        window.strategies.forEach(strat => {
+            if(stratIdTarget && strat.id !== stratIdTarget) return;
+
+            let dateEl = document.getElementById(`date-${strat.id}`);
+            let multEl = document.getElementById(`mult-${strat.id}`);
+            if(!dateEl) return;
+            let dateVal = dateEl.value;
+
+            let buyContainer = document.getElementById(`buy-container-${strat.id}`);
+            let sellContainer = document.getElementById(`sell-container-${strat.id}`);
+            if(buyContainer) buyContainer.innerHTML = '';
+            if(sellContainer) sellContainer.innerHTML = '';
+
+            let dayData = window.allData[dateVal] && window.allData[dateVal][strat.id] ? window.allData[dateVal][strat.id] : null;
+
+            if (strat.id === 'strat1' || strat.name === '스위치') {
+                let p = (dayData && dayData.switchParams) ? dayData.switchParams : (strat.switchParams || { closePrice: 102.32, totalCash: 24000, totalRounds: 16, holdingsQty: 0, currentRound: 0, gridStepQty: 1 });
+                let closeEl = document.getElementById(`sw-close-${strat.id}`);
+                let cashEl = document.getElementById(`sw-cash-${strat.id}`);
+                let roundsEl = document.getElementById(`sw-rounds-${strat.id}`);
+                let holdingsEl = document.getElementById(`sw-holdings-${strat.id}`);
+                let curRoundEl = document.getElementById(`sw-current-round-${strat.id}`);
+                let gridQtyEl = document.getElementById(`sw-grid-qty-${strat.id}`);
+
+                if(closeEl) closeEl.value = p.closePrice || 102.32;
+                if(cashEl) cashEl.value = p.totalCash || 24000;
+                if(roundsEl) roundsEl.value = p.totalRounds || 16;
+                if(holdingsEl) holdingsEl.value = p.holdingsQty || 0;
+                if(curRoundEl) curRoundEl.value = p.currentRound || 0;
+                if(gridQtyEl) gridQtyEl.value = p.gridStepQty || 1;
+
+                let rb = (parseFloat(p.totalCash) || 24000) / (parseInt(p.totalRounds) || 16);
+                let budgetEl = document.getElementById(`sw-budget-display-${strat.id}`);
+                if(budgetEl) budgetEl.textContent = `$${rb.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+            }
+
+            if (dayData) {
+                if(multEl && dayData.mult) multEl.value = dayData.mult;
+                if(dayData.buys && dayData.buys.length > 0) {
+                    dayData.buys.forEach(b => window.addRow(strat.id, 'buy', b.price, b.qty));
+                } else {
+                    for(let i=0; i<3; i++) window.addRow(strat.id, 'buy');
+                }
+                if(dayData.sells && dayData.sells.length > 0) {
+                    dayData.sells.forEach(s => window.addRow(strat.id, 'sell', s.price, s.qty, s.isMoc));
+                } else {
+                    for(let i=0; i<3; i++) window.addRow(strat.id, 'sell');
+                }
+            } else {
+                for(let i=0; i<3; i++) window.addRow(strat.id, 'buy');
+                for(let i=0; i<3; i++) window.addRow(strat.id, 'sell');
+            }
+        });
+    }
+
+    window.onDateOrDataChanged = function(stratId) {
+        loadDataForDate(stratId);
+    };
+
+    window.saveStrategyDailyOrders = async function(stratId) {
+        collectCurrentUIInputs();
+        await window.saveCloudDataInstant();
+        let dateVal = document.getElementById(`date-${stratId}`).value;
+        let strat = window.strategies.find(s => s.id === stratId);
+        alert(`[${dateVal}] ${strat.name} 주문 기록이 클라우드에 안전하게 저장되었습니다.`);
+    };
+
+    window.resetAllData = async function() {
+        if (!confirm("모든 데이터가 초기화됩니다. 계속하시겠습니까?")) return;
+        window.strategies = getDefaultStrategies();
+        window.allData = {};
+        window.historyData = [];
+        await window.saveCloudDataInstant();
+        location.reload();
+    };
+
+    function renderStrategyManageList() {
+        const container = document.getElementById('strategy-manage-list');
+        if(!container) return;
+        container.innerHTML = '';
+        window.strategies.forEach((strat, index) => {
+            container.innerHTML += `
+                <div class="strat-manage-box">
+                    <span style="font-weight:bold; width:30px;">#${index+1}</span>
+                    <input type="text" value="${strat.name}" style="flex:1;" oninput="window.strategies[${index}].name=this.value; window.saveCloudDataInstant();">
+                    <button class="delete-btn" onclick="deleteStrategy('${strat.id}')" style="font-size:16px; color:#e53e3e;">🗑️ 삭제</button>
+                </div>
+            `;
+        });
+    }
+
+    window.addNewStrategy = async function() {
+        let nameInput = document.getElementById('new-strat-name');
+        let name = nameInput.value.trim();
+        if(!name) { alert("기법 이름을 입력해주세요."); return; }
+        window.strategies.push({ id: 'strat_' + Date.now(), name: name, defaultMult: 1, defaultCash: 50000, defaultShares: 0, defaultAvg: 0, defaultInit: 50000 });
+        await window.saveCloudDataInstant();
+        location.reload();
+    };
+
+    window.deleteStrategy = async function(stratId) {
+        if(window.strategies.length <= 1) { alert("최소 1개의 기법은 남아있어야 합니다."); return; }
+        if(!confirm("삭제하시겠습니까?")) return;
+        window.strategies = window.strategies.filter(s => s.id !== stratId);
+        await window.saveCloudDataInstant();
+        location.reload();
+    };
+
+    let isStratHistoryAllView = false;
+    window.toggleStratHistoryViewMode = function() {
+        isStratHistoryAllView = !isStratHistoryAllView;
+        let btn = document.getElementById('strat-history-toggle-btn');
+        if(btn) btn.textContent = isStratHistoryAllView ? '전체보기 전환' : '조회일만 보기 전환';
+        calculateTotalNet();
+    };
+
+    window.deleteStratHistoryItem = async function(dateStr) {
+        if (!confirm(`[${dateStr}] 기록을 삭제하시겠습니까?`)) return;
+        delete window.allData[dateStr];
+        await window.saveCloudDataInstant();
+        calculateTotalNet();
+        window.strategies.forEach(strat => {
+            let dateEl = document.getElementById(`date-${strat.id}`);
+            if(dateEl && dateEl.value === dateStr) loadDataForDate(strat.id);
+        });
+    };
+
+    window.calculateTotalNet = function() {
+        let targetDate = document.getElementById('target-calc-date').value;
+        let dayData = window.allData[targetDate] || {};
+        let rawBuys = [], rawSells = [], hasValidInput = false;
+
+        window.strategies.forEach(strat => {
+            let stratData = dayData[strat.id];
+            if(!stratData) return;
+            let mult = stratData.mult || 1;
+
+            if(stratData.buys) {
+                stratData.buys.forEach(b => {
+                    let price = parseFloat(b.price), qty = parseInt(b.qty);
+                    if(!isNaN(price) && !isNaN(qty) && qty > 0) {
+                        hasValidInput = true;
+                        qty = qty * mult;
+                        for(let i=0; i<qty; i++) rawBuys.push(price);
+                    }
+                });
+            }
+            if(stratData.sells) {
+                stratData.sells.forEach(s => {
+                    let price = parseFloat(s.price), qty = parseInt(s.qty), isMoc = s.isMoc;
+                    if(!isNaN(qty) && qty > 0) {
+                        hasValidInput = true;
+                        qty = qty * mult;
+                        for(let i=0; i<qty; i++) {
+                            if (isMoc) rawSells.push(-1);
+                            else if (!isNaN(price)) rawSells.push(price);
+                        }
+                    }
+                });
+            }
+        });
+
+        const resultBox = document.getElementById('final-result-box');
+        const sellList = document.getElementById('sell-result-list');
+        const buyList = document.getElementById('buy-result-list');
+        const cashDisplay = document.getElementById('cash-needed-display');
+        const stratInputHistoryContainer = document.getElementById('strat-input-history-container');
+
+        if (stratInputHistoryContainer) {
+            stratInputHistoryContainer.innerHTML = '';
+            let allDates = Object.keys(window.allData).sort((a, b) => new Date(b) - new Date(a));
+            if (targetDate && window.allData[targetDate]) {
+                allDates = allDates.filter(d => d !== targetDate);
+                allDates.unshift(targetDate);
+            }
+            if (isStratHistoryAllView && targetDate) allDates = allDates.filter(d => d === targetDate);
+
+            if (allDates.length === 0) {
+                stratInputHistoryContainer.innerHTML = '<div class="empty-slot">저장된 주문 기록이 없습니다.</div>';
+            } else {
+                allDates.forEach(dStr => {
+                    let dateData = window.allData[dStr] || {};
+                    let isSelectedCard = (dStr === targetDate);
+                    let stratCardsHtml = '';
+                    
+                    window.strategies.forEach(strat => {
+                        let sData = dateData[strat.id];
+                        let mult = sData ? (sData.mult || 1) : 1;
+                        let bList = sData && sData.buys ? sData.buys.filter(b => b.price && b.qty) : [];
+                        let sList = sData && sData.sells ? sData.sells.filter(s => (s.price || s.isMoc) && s.qty) : [];
+                        let buyStr = bList.length > 0 ? `<b>LOC:</b> ` + bList.map(b => `$${b.price} / ${b.qty}주`).join(', ') : '매수 주문 없음';
+                        let sellStr = '매도 주문 없음';
+                        if (sList.length > 0) {
+                            let loc = sList.filter(s => !s.isMoc), moc = sList.filter(s => s.isMoc);
+                            let parts = [];
+                            if (loc.length) parts.push(`<b>LOC:</b> ` + loc.map(s => `$${s.price} / ${s.qty}주`).join(', '));
+                            if (moc.length) parts.push(`<b>MOC:</b> ` + moc.map(s => `${s.qty}주`).join(', '));
+                            sellStr = parts.join(' | ');
+                        }
+                        stratCardsHtml += `<div style="background:#f8f9fa; border:1px solid #edf2f7; border-radius:6px; padding:8px 12px; margin-bottom:6px; font-size:13px;">
+                            <div style="font-weight:bold; color:#1a365d; margin-bottom:4px;">📌 ${strat.name} <span style="font-size:11px; color:#666;">(배율: ${mult}배)</span></div>
+                            <div style="color:#e53e3e; margin-bottom:2px;">🔴 매수: ${buyStr}</div>
+                            <div style="color:#3182ce;">🔵 매도: ${sellStr}</div>
+                        </div>`;
+                    });
+
+                    stratInputHistoryContainer.innerHTML += `
+                        <div class="history-card" style="${isSelectedCard ? 'border: 2px solid #2b6cb0; background-color: #f7fafc;' : ''}">
+                            <div class="history-header" style="${isSelectedCard ? 'color: #2b6cb0;' : 'color: #4a5568;'}">
+                                <span>📅 날짜: ${dStr} ${isSelectedCard ? '<b>(선택된 날짜)</b>' : ''}</span>
+                                <button onclick="deleteStratHistoryItem('${dStr}')" style="background:none; border:none; color:#e53e3e; cursor:pointer; font-weight:bold;">삭제</button>
+                            </div>
+                            <div>${stratCardsHtml}</div>
+                        </div>`;
+                });
+            }
+        }
+
+        if (!hasValidInput) { resultBox.style.display = 'none'; return; }
+
+        rawBuys.sort((a, b) => b - a);
+        rawSells.sort((a, b) => a - b);
+        let netOrders = { 'buy': {}, 'sell': {}, 'moc_sell': 0 };
+        function addNet(type, price, qty) {
+            if (price === 'MOC') netOrders.moc_sell += qty;
+            else netOrders[type][price.toFixed(2)] = (netOrders[type][price.toFixed(2)] || 0) + qty;
+        }
+
+        while (rawBuys.length > 0 && rawSells.length > 0) {
+            let b = rawBuys[0], s = rawSells[0];
+            if (s === -1 || b >= s) {
+                rawBuys.shift(); rawSells.shift();
+                addNet('sell', b + 0.01, 1);
+                if (s !== -1) addNet('buy', s - 0.01, 1);
+            } else { break; }
+        }
+
+        rawBuys.forEach(b => addNet('buy', b, 1));
+        rawSells.forEach(s => s === -1 ? addNet('sell', 'MOC', 1) : addNet('sell', s, 1));
+
+        let sellResults = [];
+        for (let p in netOrders.sell) sellResults.push({ price: parseFloat(p), qty: netOrders.sell[p], isMoc: false });
+        if (netOrders.moc_sell > 0) sellResults.push({ price: 0, qty: netOrders.moc_sell, isMoc: true });
+        sellResults.sort((a, b) => b.price - a.price);
+
+        let buyResults = [];
+        for (let p in netOrders.buy) buyResults.push({ price: parseFloat(p), qty: netOrders.buy[p] });
+        buyResults.sort((a, b) => b.price - a.price);
+
+        sellList.innerHTML = sellResults.length === 0 ? '<div class="empty-slot">매도 주문 없음</div>' : '';
+        sellResults.forEach((item, index) => {
+            let bg = index % 2 === 0 ? 'row-white' : 'row-yellow';
+            let txt = item.isMoc ? `매도·MOC` : `매도·LOC $${item.price.toFixed(2)}`;
+            sellList.innerHTML += `<div class="order-card card-sell ${bg}"><span><span class="dot dot-sell"></span><b style="color:#3182ce;">${txt}</b></span><b style="color:#3182ce;">${item.qty}주</b></div>`;
+        });
+
+        buyList.innerHTML = buyResults.length === 0 ? '<div class="empty-slot">매수 주문 없음</div>' : '';
+        buyResults.forEach((item, index) => {
+            let bg = index % 2 === 0 ? 'row-white' : 'row-yellow';
+            buyList.innerHTML += `<div class="order-card card-buy ${bg}"><span><span class="dot dot-buy"></span><b style="color:#e53e3e;">매수·LOC $${item.price.toFixed(2)}</b></span><b style="color:#e53e3e;">${item.qty}주</b></div>`;
+        });
+
+        let finalBuyNeedMoney = 0;
+        for (let p in netOrders.buy) finalBuyNeedMoney += parseFloat(p) * netOrders.buy[p];
+
+        cashDisplay.innerHTML = `<div class="cash-needed-box">💰 <b>[${targetDate}] 체결 시 필요 예수금</b><br>➔ 약 <b>$${finalBuyNeedMoney.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> 필요</div>`;
+        resultBox.style.display = 'block';
+    };
+
+    window.renderBalanceTable = function() {
+        const tbody = document.getElementById('balance-tbody');
+        const tfoot = document.getElementById('balance-tfoot');
+        const krwDisplay = document.getElementById('krw-summary-display');
+        if(!tbody || !tfoot) return;
+        
+        let recordDate = document.getElementById('record-date').value;
+        window.historyData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        let exactRecord = window.historyData.find(h => h.date === recordDate);
+        let rateInput = document.getElementById('record-exchange-rate');
+        let closeInput = document.getElementById('record-close-price');
+
+        if (exactRecord) {
+            if (closeInput && closeInput.dataset.lastDate !== recordDate) { closeInput.value = exactRecord.closePrice; closeInput.dataset.lastDate = recordDate; }
+            if (rateInput && rateInput.dataset.lastDate !== recordDate) { rateInput.value = exactRecord.exchangeRate || 1350; rateInput.dataset.lastDate = recordDate; }
+        } else {
+            if (closeInput && closeInput.dataset.lastDate !== recordDate) { closeInput.dataset.lastDate = recordDate; }
+            if (rateInput && rateInput.dataset.lastDate !== recordDate) { rateInput.dataset.lastDate = recordDate; }
+        }
+
+        let closePrice = parseFloat(closeInput.value) || 0;
+        let exchangeRate = parseFloat(rateInput.value) || 0;
+
+        let pastRecords = window.historyData.filter(h => h.date < recordDate);
+        let baseRecord = pastRecords.length > 0 ? pastRecords[pastRecords.length - 1] : null;
+
+        tbody.innerHTML = '';
+        let totalShares = 0, totalCash = 0, totalValUSD = 0, totalInit = 0, totalWeightedCost = 0;
+        let dayOrders = window.allData[recordDate] || {};
+
+        window.strategies.forEach(strat => {
+            let base = { 
+                shares: strat.defaultShares || 0, 
+                avgPrice: strat.defaultAvg || 0, 
+                cash: strat.defaultCash || 50000, 
+                initCash: strat.defaultInit || 50000 
+            }; 
+            
+            if (baseRecord && baseRecord.details && baseRecord.details[strat.id]) {
+                let d = baseRecord.details[strat.id];
+                base = { shares: d.shares, avgPrice: d.avgPrice, cash: d.cash, initCash: d.initCash };
+            }
+
+            let stratDayOrders = dayOrders[strat.id] || null;
+            let mult = stratDayOrders ? (stratDayOrders.mult || 1) : (strat.defaultMult || 1);
+            let currentShares = Number(base.shares), currentAvg = Number(base.avgPrice), currentCash = Number(base.cash), initCash = Number(base.initCash);
+
+            if (stratDayOrders) {
+                if(stratDayOrders.buys) {
+                    stratDayOrders.buys.forEach(b => {
+                        let bPrice = parseFloat(b.price), bQty = parseInt(b.qty) * mult;
+                        if (!isNaN(bPrice) && !isNaN(bQty) && bQty > 0 && closePrice <= bPrice) {
+                            let totalCost = bQty * closePrice;
+                            let newTotalShares = currentShares + bQty;
+                            if (newTotalShares > 0) currentAvg = ((currentShares * currentAvg) + totalCost) / newTotalShares;
+                            currentShares = newTotalShares;
+                            currentCash -= totalCost;
+                        }
+                    });
+                }
+                if(stratDayOrders.sells) {
+                    stratDayOrders.sells.forEach(s => {
+                        let sPrice = parseFloat(s.price), sQty = parseInt(s.qty) * mult, isMoc = s.isMoc;
+                        if (!isNaN(sQty) && sQty > 0 && (isMoc || (!isNaN(sPrice) && closePrice >= sPrice))) {
+                            let executedQty = Math.min(currentShares, sQty);
+                            if (executedQty > 0) {
+                                currentCash += executedQty * closePrice;
+                                currentShares -= executedQty;
+                                if (currentShares === 0) currentAvg = 0;
+                            }
+                        }
+                    });
+                }
+            }
+
+            let evaluationTotal = currentShares > 0 ? (currentShares * closePrice) + currentCash : currentCash;
+            let profitUSD = evaluationTotal - initCash;
+            let returnRate = initCash > 0 ? (profitUSD / initCash) * 100 : 0;
+
+            totalShares += currentShares; totalCash += currentCash; totalValUSD += evaluationTotal; totalInit += initCash; totalWeightedCost += currentShares * currentAvg;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td><b>${strat.name}</b></td>
+                    <td><input type="number" id="bal-shares-${strat.id}" value="${currentShares}"></td>
+                    <td><input type="number" step="0.01" id="bal-avg-${strat.id}" value="${currentAvg.toFixed(2)}"></td>
+                    <td><input type="number" step="0.01" id="bal-cash-${strat.id}" value="${currentCash.toFixed(2)}"></td>
+                    <td><input type="number" step="0.01" id="bal-val-${strat.id}" value="${evaluationTotal.toFixed(2)}"></td>
+                    <td style="color:${profitUSD>=0?'#e53e3e':'#3182ce'}">$${profitUSD.toFixed(2)}</td>
+                    <td style="color:${returnRate>=0?'#e53e3e':'#3182ce'}">${returnRate >= 0 ? '▲' : '▼'}${Math.abs(returnRate).toFixed(1)}%</td>
+                    <td><input type="number" id="bal-init-${strat.id}" value="${initCash}"></td>
+                </tr>`;
+        });
+
+        let totProfit = totalValUSD - totalInit, totRet = totalInit > 0 ? (totProfit / totalInit) * 100 : 0;
+        let totalAvgPrice = totalShares > 0 ? (totalWeightedCost / totalShares) : 0;
+        let totalValKRW = totalValUSD * exchangeRate;
+
+        tfoot.innerHTML = `<tr><td>합계</td><td style="color:#e53e3e;">${totalShares}</td><td>${totalShares > 0 ? '$' + totalAvgPrice.toFixed(2) : '-'}</td><td style="color:#2b6cb0;">$${totalCash.toFixed(2)}</td><td style="color:#1a365d;">$${totalValUSD.toFixed(2)}</td><td style="color:${totProfit>=0?'#e53e3e':'#3182ce'}">$${totProfit.toFixed(2)}</td><td style="color:${totRet>=0?'#e53e3e':'#3182ce'}">${totRet >= 0 ? '▲' : '▼'}${Math.abs(totRet).toFixed(1)}%</td><td>$${totalInit.toFixed(2)}</td></tr>`;
+
+        let prevRecordForDiff = pastRecords.length > 0 ? pastRecords[pastRecords.length - 1] : null;
+        let diffKRW = prevRecordForDiff ? (totalValKRW - prevRecordForDiff.totalValKRW) : 0;
+        let diffPct = prevRecordForDiff && prevRecordForDiff.totalValKRW > 0 ? (diffKRW / prevRecordForDiff.totalValKRW) * 100 : 0;
+
+        let diffSign = diffKRW >= 0 ? '▲' : '▼';
+        let diffColor = diffKRW >= 0 ? '#e53e3e' : '#3182ce';
+        let diffHtml = prevRecordForDiff ? 
+            `전일 대비: <span style="color:${diffColor}; font-weight:bold;">${diffSign} ₩${Math.abs(diffKRW).toLocaleString('ko-KR', {maximumFractionDigits: 0})} (${Math.abs(diffPct).toFixed(2)}%)</span>` : 
+            `<span style="color:#888;">(전일 기록 없음)</span>`;
+
+        if (krwDisplay) {
+            krwDisplay.innerHTML = `<div class="krw-summary-box"><span>💱 <b>원화 환산액</b> (₩${exchangeRate.toLocaleString()}/$1) &nbsp;|&nbsp; ${diffHtml}</span><b>￦${totalValKRW.toLocaleString('ko-KR', {maximumFractionDigits: 0})}</b></div>`;
+        }
+    };
+
+    window.updateBalanceLive = function() { window.renderBalanceTable(); };
+
+    window.saveDailyRecord = async function() {
+        let date = document.getElementById('record-date').value;
+        let closePrice = parseFloat(document.getElementById('record-close-price').value) || 0;
+        let exchangeRate = parseFloat(document.getElementById('record-exchange-rate').value) || 0;
+        let details = {}, totalValUSD = 0, totalInit = 0, totalSh = 0;
+
+        window.strategies.forEach(strat => {
+            let shares = parseFloat(document.getElementById(`bal-shares-${strat.id}`).value) || 0;
+            let avgPrice = parseFloat(document.getElementById(`bal-avg-${strat.id}`).value) || 0;
+            let cash = parseFloat(document.getElementById(`bal-cash-${strat.id}`).value) || 0;
+            let valUSD = parseFloat(document.getElementById(`bal-val-${strat.id}`).value) || 0;
+            let initCash = parseFloat(document.getElementById(`bal-init-${strat.id}`).value) || 0;
+            let profitUSD = valUSD - initCash, returnRate = initCash > 0 ? (profitUSD / initCash) * 100 : 0;
+
+            totalValUSD += valUSD; totalInit += initCash; totalSh += shares;
+            details[strat.id] = { name: strat.name, shares, avgPrice, cash, valUSD, initCash, profitUSD, returnRate };
+        });
+
+        let totProfit = totalValUSD - totalInit, totRet = totalInit > 0 ? (totProfit / totalInit) * 100 : 0;
+        let totalValKRW = totalValUSD * exchangeRate;
+
+        let tempHistory = window.historyData.filter(h => h.date !== date);
+        tempHistory.sort((a, b) => new Date(a.date) - new Date(b.date));
+        let pastRecords = tempHistory.filter(h => h.date < date);
+        let prevRecord = pastRecords.length > 0 ? pastRecords[pastRecords.length - 1] : null;
+
+        let diffKRW = prevRecord ? (totalValKRW - prevRecord.totalValKRW) : 0;
+        let diffPct = prevRecord && prevRecord.totalValKRW > 0 ? (diffKRW / prevRecord.totalValKRW) * 100 : 0;
+
+        let recordItem = { date, closePrice, exchangeRate, totalSh, totalValUSD, totalValKRW, diffKRW, diffPct, totProfit, totRet, details };
+        
+        let existingIndex = window.historyData.findIndex(h => h.date === date);
+        if (existingIndex >= 0) window.historyData[existingIndex] = recordItem;
+        else window.historyData.push(recordItem);
+
+        window.historyData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        await window.saveCloudDataInstant();
+        alert(`[${date}] 일별 잔고가 클라우드에 안전하게 저장되었습니다!`);
+        renderHistoryList();
+    };
+
+    let isBalanceHistoryAllView = false;
+    window.toggleBalanceHistoryViewMode = function() {
+        isBalanceHistoryAllView = !isBalanceHistoryAllView;
+        let btn = document.getElementById('balance-history-toggle-btn');
+        if(btn) btn.textContent = isBalanceHistoryAllView ? '전체보기 전환' : '조회일만 보기 전환';
+        renderHistoryList();
+    };
+
+    window.deleteHistoryItem = async function(dateStr) {
+        if (!confirm(`[${dateStr}] 기록을 삭제하시겠습니까?`)) return;
+        window.historyData = window.historyData.filter(h => h.date !== dateStr);
+        await window.saveCloudDataInstant();
+        renderHistoryList();
+    };
+
+    function renderHistoryList() {
+        const container = document.getElementById('history-container');
+        if(!container) return;
+        let recordDate = document.getElementById('record-date') ? document.getElementById('record-date').value : '';
+        if (window.historyData.length === 0) { container.innerHTML = '<div class="empty-slot">저장된 히스토리가 없습니다.</div>'; return; }
+
+        let sorted = [...window.historyData].sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (isBalanceHistoryAllView && recordDate) sorted = sorted.filter(h => h.date === recordDate);
+
+        container.innerHTML = '';
+        sorted.forEach((item) => {
+            let detailHtml = '', idx = 0;
+            let gradientStops = [];
+            let currentAngle = 0;
+            let totalVal = item.totalValUSD || 1;
+
+            for (let key in item.details) {
+                let d = item.details[key], color = chartColors[idx % chartColors.length];
+                let weight = totalVal > 0 ? ((d.valUSD / totalVal) * 100).toFixed(1) : 0;
+                
+                let pct = totalVal > 0 ? (d.valUSD / totalVal) : 0;
+                if (pct > 0) {
+                    let startAngle = currentAngle;
+                    let endAngle = currentAngle + (pct * 360);
+                    gradientStops.push(`${color} ${startAngle}deg ${endAngle}deg`);
+                    currentAngle = endAngle;
+                }
+
+                detailHtml += `<div style="display:flex; align-items:center; margin-bottom:3px; gap:6px;"><span style="width:8px; height:8px; background:${color}; border-radius:50%; display:inline-block;"></span><span><b>${d.name}</b>: ${d.shares}주 (평단:$${d.avgPrice}, 총합:$${d.valUSD}) — 비중 <b>${weight}%</b></span></div>`;
+                idx++;
+            }
+
+            let conicStyle = gradientStops.length > 0 ? `background: conic-gradient(${gradientStops.join(', ')});` : 'background: #edf2f7;';
+            let isSelected = (item.date === recordDate);
+
+            let diffHtml = '';
+            if (item.diffKRW !== undefined) {
+                let sign = item.diffKRW >= 0 ? '▲' : '▼';
+                let color = item.diffKRW >= 0 ? '#e53e3e' : '#3182ce';
+                let pctStr = item.diffPct !== undefined ? `(${Math.abs(item.diffPct).toFixed(2)}%)` : '';
+                diffHtml = ` <span style="color:${color}; font-size:12px;">(전일 대비 ${sign} ₩${Math.abs(item.diffKRW).toLocaleString('ko-KR', {maximumFractionDigits: 0})} ${pctStr})</span>`;
+            }
+
+            container.innerHTML += `
+                <div class="history-card" style="${isSelected ? 'border: 2px solid #2b6cb0; background-color: #f7fafc;' : ''}">
+                    <div class="history-header" style="${isSelected ? 'color: #2b6cb0;' : 'color: #4a5568;'}">
+                        <span>📅 ${item.date} (종가: $${item.closePrice} | 환율: ₩${item.exchangeRate || 1350})</span>
+                        <button onclick="deleteHistoryItem('${item.date}')" style="background:none; border:none; color:#e53e3e; cursor:pointer; font-weight:bold;">삭제</button>
+                    </div>
+                    <div class="history-body-grid">
+                        <div class="history-info-side">
+                            <b>총 수량:</b> ${item.totalSh}주 | <b>평가금액:</b> $${item.totalValUSD.toFixed(2)} (<b>￦${(item.totalValKRW || 0).toLocaleString()}</b>${diffHtml})<br>
+                            <b>손익:</b> <span style="color:${item.totProfit>=0?'#e53e3e':'#3182ce'}">$${item.totProfit.toFixed(2)} (${item.totRet >= 0 ? '▲' : '▼'}${Math.abs(item.totRet).toFixed(1)}%)</span>
+                            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #edf2f7;">${detailHtml}</div>
+                        </div>
+                        <div class="history-chart-side">
+                            <div style="width: 100px; height: 100px; border-radius: 50%; ${conicStyle} position: relative; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.08);">
+                                <div style="width: 62px; height: 62px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; color: #4a5568; box-shadow: inset 0 2px 4px rgba(0,0,0,0.04);">
+                                    비중
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        });
     }
 </script>
 </body>
