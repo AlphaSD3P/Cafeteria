@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스위치 매매법 시스템 - 1번 기법 (보안 연동)</title>
+    <title>스위치 매매법 통합 시스템 (완전판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -56,14 +56,16 @@
 
         async function loadCloudData() {
             try {
-                const docSnap = await getDoc(doc(db, "appData", "switchStrategy1State"));
+                const docSnap = await getDoc(doc(db, "appData", "switchStrategyUnified"));
                 if (docSnap.exists()) {
                     let d = docSnap.data();
                     if(d.closePrice) document.getElementById('close-price').value = d.closePrice;
+                    if(d.fxRate) document.getElementById('fx-rate').value = d.fxRate;
                     if(d.totalCash) document.getElementById('total-cash').value = d.totalCash;
                     if(d.totalRounds) document.getElementById('total-rounds').value = d.totalRounds;
                     if(d.holdingsQty) document.getElementById('holdings-qty').value = d.holdingsQty;
                     if(d.currentRound) document.getElementById('current-round').value = d.currentRound;
+                    if(d.gridStepQty) document.getElementById('grid-step-qty').value = d.gridStepQty;
                 }
             } catch (e) { console.error("데이터 로드 실패:", e); }
             renderAll();
@@ -71,15 +73,17 @@
 
         window.saveToCloud = async function() {
             try {
-                await setDoc(doc(db, "appData", "switchStrategy1State"), {
+                await setDoc(doc(db, "appData", "switchStrategyUnified"), {
                     closePrice: document.getElementById('close-price').value,
+                    fxRate: document.getElementById('fx-rate').value,
                     totalCash: document.getElementById('total-cash').value,
                     totalRounds: document.getElementById('total-rounds').value,
                     holdingsQty: document.getElementById('holdings-qty').value,
                     currentRound: document.getElementById('current-round').value,
+                    gridStepQty: document.getElementById('grid-step-qty').value,
                     updatedAt: new Date().toISOString()
                 });
-                alert("1번 매매법 데이터가 클라우드에 안전하게 저장되었습니다.");
+                alert("모든 설정 및 상태 데이터가 클라우드에 안전하게 저장되었습니다.");
             } catch (e) { alert("저장 실패: " + e.message); }
         }
     </script>
@@ -92,11 +96,21 @@
         
         #app-screen { display: none; width: 100%; max-width: 1100px; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 25px; }
         
-        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-        .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 15px; }
+        /* 탭 네비게이션 */
+        .tab-nav { display: flex; gap: 6px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab-btn { padding: 8px 16px; background: #edf2f7; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; color: #4a5568; }
+        .tab-btn.active { background: #3182ce; color: #fff; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .global-bar { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; justify-content: center; flex-wrap: wrap; }
         .input-group { display: flex; flex-direction: column; gap: 4px; }
         .input-group label { font-size: 11px; font-weight: bold; color: #4a5568; }
-        .input-group input { padding: 8px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 13px; font-weight: bold; }
+        .input-group input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 13px; font-weight: bold; width: 140px; }
+
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 15px; }
 
         .excel-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; margin-top: 10px; }
         .excel-table th, .excel-table td { border: 1px solid #cbd5e0; padding: 9px; }
@@ -120,83 +134,165 @@
         <button onclick="logout()" style="background:none; border:1px solid #cbd5e0; padding:3px 8px; border-radius:4px; cursor:pointer; color:#e53e3e; font-weight:bold;">로그아웃</button>
     </div>
 
-    <!-- 1번 매매법 제어 및 상태 입력 패널 -->
-    <div class="card" style="border-left: 4px solid #3182ce;">
-        <div style="font-weight:bold; font-size:15px; color:#2b6cb0; margin-bottom:12px;">
-            ⚙️ [1번 기법] 상태 입력 및 파라미터 설정 (언제든 0회차 리셋 가능)
-        </div>
+    <!-- 탭 네비게이션 -->
+    <div class="tab-nav">
+        <button class="tab-btn active" onclick="openTab('tab-s1', this)">📈 스위치 1번 매매법</button>
+        <button class="tab-btn" onclick="openTab('tab-tuck', this)">🔄 퉁치기 결과보기</button>
+        <button class="tab-btn" onclick="openTab('tab-history', this)">📊 잔고 & 일별기록</button>
+        <button class="tab-btn" onclick="openTab('tab-mgmt', this)">⚙️ 기법 관리</button>
+    </div>
 
-        <div class="input-grid">
-            <div class="input-group">
-                <label>📅 기준 날짜</label>
-                <input type="date" id="target-date">
-            </div>
-            <div class="input-group">
-                <label>💵 전일 종가 ($)</label>
-                <input type="number" step="0.01" id="close-price" value="102.32" oninput="renderAll()">
-            </div>
-            <div class="input-group">
-                <label>💰 계정 총 예수금 ($)</label>
-                <input type="number" step="0.01" id="total-cash" value="72080.43" oninput="renderAll()">
-            </div>
-            <div class="input-group">
-                <label>🔄 전체 매수 회차</label>
-                <input type="number" id="total-rounds" value="16" oninput="renderAll()">
-            </div>
-            <div class="input-group">
-                <label>📦 현재 보유 수량 (주)</label>
-                <input type="number" id="holdings-qty" value="0" oninput="renderAll()">
-            </div>
-            <div class="input-group">
-                <label>📊 현재 진행 회차</label>
-                <input type="number" id="current-round" value="0" oninput="renderAll()">
-            </div>
+    <!-- 공통 기준 바 -->
+    <div class="global-bar">
+        <div class="input-group">
+            <label>📅 기준 날짜</label>
+            <input type="date" id="target-date">
         </div>
-
-        <div style="display:flex; gap:15px; background:#edf2f7; padding:10px; border-radius:6px; font-size:12px; font-weight:bold; color:#2d3748;">
-            <div>📊 1회차 배정 매수금: <span id="info-round-budget" style="color:#2b6cb0;">$0.00</span></div>
-            <div>📉 최대 하락 방어 폭: <span style="color:#e53e3e;">-20.0%</span></div>
+        <div class="input-group">
+            <label>💵 전일 종가 ($)</label>
+            <input type="number" step="0.01" id="close-price" value="102.32" oninput="renderAll()">
+        </div>
+        <div class="input-group">
+            <label>💱 환율 (원/달러)</label>
+            <input type="number" step="0.1" id="fx-rate" value="1353.3" oninput="renderAll()">
         </div>
     </div>
 
-    <!-- 당일 주문 제안 결과 표 -->
-    <div class="card">
-        <div style="font-weight:bold; font-size:14px; margin-bottom:10px; color:#2d3748;">
-            📋 당일(오늘) 실행해야 할 LOC 주문 제안 표 (실시간 연동)
-        </div>
-        <table class="excel-table">
-            <thead>
-                <tr>
-                    <th>구분</th>
-                    <th>주문 유형</th>
-                    <th>목표 가격 ($)</th>
-                    <th>주문 수량 (주)</th>
-                    <th>예상 금액 ($)</th>
-                    <th>전략 설명</th>
-                </tr>
-            </thead>
-            <tbody id="simulation-tbody">
-                <!-- 자바스크립트로 동적 렌더링 -->
-            </tbody>
-        </table>
+    <!-- [탭 1] 스위치 1번 매매법 -->
+    <div id="tab-s1" class="tab-content active">
+        <div class="card" style="border-left: 4px solid #3182ce;">
+            <div style="font-weight:bold; font-size:15px; color:#2b6cb0; margin-bottom:12px;">
+                ⚙️ [1번 기법] 상태 파라미터 자유 설정 (0회차 리셋 가능)
+            </div>
 
-        <button class="action-btn" onclick="saveToCloud()">💾 현재 1번 기법 상태 클라우드 저장</button>
+            <div class="input-grid">
+                <div class="input-group">
+                    <label>💰 총 예수금 ($)</label>
+                    <input type="number" step="0.01" id="total-cash" value="24000" oninput="renderAll()">
+                </div>
+                <div class="input-group">
+                    <label>🔄 전체 매수 회차</label>
+                    <input type="number" id="total-rounds" value="16" oninput="renderAll()">
+                </div>
+                <div class="input-group">
+                    <label>📦 현재 보유 수량 (주)</label>
+                    <input type="number" id="holdings-qty" value="0" oninput="renderAll()">
+                </div>
+                <div class="input-group">
+                    <label>📊 현재 진행 회차</label>
+                    <input type="number" id="current-round" value="0" oninput="renderAll()">
+                </div>
+                <div class="input-group">
+                    <label>🧱 하락 그리드 단위 수량 (주)</label>
+                    <input type="number" id="grid-step-qty" value="1" oninput="renderAll()">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:20px; background:#edf2f7; padding:10px; border-radius:6px; font-size:12px; font-weight:bold; color:#2d3748; flex-wrap:wrap;">
+                <div>📊 1회차 배정 매수금: <span id="info-round-budget" style="color:#2b6cb0;">$0.00</span></div>
+                <div>📉 최대 하락 방어 폭: <span style="color:#e53e3e;">-20.0%</span></div>
+                <div>💱 원화 환산 총평가액: <span id="info-krw-val" style="color:#276749;">₩0</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="font-weight:bold; font-size:14px; margin-bottom:10px; color:#2d3748;">
+                📋 당일(오늘) 실행해야 할 LOC 주문 제안 표 (실시간 연동)
+            </div>
+            <table class="excel-table">
+                <thead>
+                    <tr>
+                        <th>구분</th>
+                        <th>주문 유형</th>
+                        <th>목표 가격 ($)</th>
+                        <th>주문 수량 (주)</th>
+                        <th>예상 금액 ($)</th>
+                        <th>전략 설명</th>
+                    </tr>
+                </thead>
+                <tbody id="simulation-tbody">
+                    <!-- 자바스크립트로 동적 렌더링 -->
+                </tbody>
+            </table>
+
+            <button class="action-btn" onclick="saveToCloud()">💾 1번 기법 현재 상태 클라우드 저장</button>
+        </div>
+    </div>
+
+    <!-- [탭 2] 퉁치기 결과보기 -->
+    <div id="tab-tuck" class="tab-content">
+        <div class="card">
+            <div style="font-weight:bold; font-size:14px; color:#2b6cb0; margin-bottom:10px;">🔄 퉁치기(수익실현 및 분할 매도) 시뮬레이션</div>
+            <p style="font-size:13px; color:#666;">현재 보유 중인 물량을 현재 회차 기준으로 균등 분할하여 전일 종가에 익절/퉁치기 할 때의 예상 결과를 확인합니다.</p>
+            <div id="tuck-result-box" style="background:#f7fafc; padding:15px; border-radius:8px; border:1px solid #e2e8f0; font-size:13px; margin-top:15px;">
+                <!-- 동적 렌더링 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- [탭 3] 잔고 & 일별기록 -->
+    <div id="tab-history" class="tab-content">
+        <div class="card">
+            <div style="font-weight:bold; font-size:14px; color:#2b6cb0; margin-bottom:10px;">📊 잔고 및 일별 매매 기록</div>
+            <p style="font-size:13px; color:#666;">날짜별 예수금 변동 및 자산 추이를 기록하고 관리하는 공간입니다.</p>
+            <table class="excel-table" style="margin-top:15px;">
+                <thead>
+                    <tr>
+                        <th>날짜</th>
+                        <th>전일 종가 ($)</th>
+                        <th>총 예수금 ($)</th>
+                        <th>보유 수량</th>
+                        <th>진행 회차</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td id="history-date">-</td>
+                        <td id="history-close">-</td>
+                        <td id="history-cash">-</td>
+                        <td id="history-holdings">-</td>
+                        <td id="history-round">-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- [탭 4] 기법 관리 -->
+    <div id="tab-mgmt" class="tab-content">
+        <div class="card">
+            <div style="font-weight:bold; font-size:14px; color:#2b6cb0; margin-bottom:10px;">⚙️ 기법 관리 및 확장 설정</div>
+            <p style="font-size:13px; color:#666;">추가적인 스위치 매매법 알고리즘 파라미터 및 시스템 환율 연동 설정을 관리합니다.</p>
+        </div>
     </div>
 </div>
 
 <script>
     document.getElementById('target-date').value = new Date().toISOString().split('T')[0];
 
+    function openTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        btn.classList.add('active');
+    }
+
     function renderAll() {
         let closePrice = parseFloat(document.getElementById('close-price').value) || 0;
+        let fxRate = parseFloat(document.getElementById('fx-rate').value) || 1350;
         let totalCash = parseFloat(document.getElementById('total-cash').value) || 0;
         let totalRounds = parseInt(document.getElementById('total-rounds').value) || 16;
         let holdingsQty = parseFloat(document.getElementById('holdings-qty').value) || 0;
         let currentRound = parseInt(document.getElementById('current-round').value) || 0;
+        let gridStepQty = parseInt(document.getElementById('grid-step-qty').value) || 1;
 
         // 1회차 배정 매수금 계산
         let roundBudget = totalCash / totalRounds;
         document.getElementById('info-round-budget').textContent = `$${roundBudget.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+
+        let totalValUsd = holdingsQty > 0 ? holdingsQty * closePrice : totalCash;
+        let totalKrw = totalValUsd * fxRate;
+        document.getElementById('info-krw-val').textContent = `₩${Math.round(totalKrw).toLocaleString()}`;
 
         let tbodyHtml = '';
 
@@ -217,12 +313,12 @@
                 </tr>
             `;
         } else {
-            // [보유 중 / N회차 진행 상태] 매도 목표 및 하락 추가 매수 그리드
+            // [보유 중 / N회차 진행 상태] 퉁치기 매도 목표
             let sellQtyPerRound = Math.round(holdingsQty / currentRound);
             tbodyHtml += `
                 <tr>
                     <td class="highlight-sell">${currentRound}회차 보유중</td>
-                    <td>LOC 매도 (수익실현/퉁치기)</td>
+                    <td>LOC 매도 (퉁치기/익절)</td>
                     <td style="color:#276749; font-weight:bold;">$${closePrice.toFixed(2)} (전일 종가)</td>
                     <td style="font-weight:bold; font-size:14px;">${sellQtyPerRound} 주</td>
                     <td>$${(sellQtyPerRound * closePrice).toFixed(2)}</td>
@@ -231,31 +327,47 @@
             `;
         }
 
-        // 하락 추가 매수 그리드 (-2% ~ -20% 구간)
+        // 하락 추가 매수 그리드 (-4% ~ -20% 구간, 사용자가 지정한 단위 수량 gridStepQty 적용)
         let dropSteps = [
-            { pct: -4.0, qty: 2, label: '추가 1단계' },
-            { pct: -8.0, qty: 2, label: '추가 2단계' },
-            { pct: -12.0, qty: 2, label: '추가 3단계' },
-            { pct: -16.0, qty: 2, label: '추가 4단계' },
-            { pct: -20.0, qty: 2, label: '추가 5단계 (최종방어)' }
+            { pct: -4.0, label: '추가 1단계' },
+            { pct: -8.0, label: '추가 2단계' },
+            { pct: -12.0, label: '추가 3단계' },
+            { pct: -16.0, label: '추가 4단계' },
+            { pct: -20.0, label: '추가 5단계 (최종방어)' }
         ];
 
         dropSteps.forEach(step => {
             let stepPrice = closePrice * (1 + step.pct / 100);
-            let stepCost = stepPrice * step.qty;
+            let stepCost = stepPrice * gridStepQty;
             tbodyHtml += `
                 <tr>
                     <td>하락 방어 그리드</td>
                     <td>LOC 추가매수</td>
                     <td>$${stepPrice.toFixed(2)} (${step.pct}%)</td>
-                    <td>${step.qty} 주</td>
+                    <td style="font-weight:bold;">${gridStepQty} 주</td>
                     <td>$${stepCost.toFixed(2)}</td>
-                    <td style="text-align:left; padding-left:10px; font-size:12px; color:#718096;">전일 종가 대비 ${step.pct}% 하락 지점 추가 매수 예약</td>
+                    <td style="text-align:left; padding-left:10px; font-size:12px; color:#718096;">전일 종가 대비 ${step.pct}% 하락 지점 사용자 설정 단위(${gridStepQty}주) 추가 매수 예약</td>
                 </tr>
             `;
         });
 
         document.getElementById('simulation-tbody').innerHTML = tbodyHtml;
+
+        // 퉁치기 탭 데이터 동기화
+        let tuckHtml = `
+            <b>현재 진행 회차:</b> ${currentRound}회차<br>
+            <b>현재 보유 수량:</b> ${holdingsQty}주<br>
+            <b>회차별 분할 매도 수량:</b> ${currentRound > 0 ? Math.round(holdingsQty / currentRound) : 0}주 / 회<br>
+            <b>전일 종가 기준 매도 시 총 예상금액:</b> $${(holdingsQty * closePrice).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}
+        `;
+        document.getElementById('tuck-result-box').innerHTML = tuckHtml;
+
+        // 잔고 탭 동기화
+        document.getElementById('history-date').textContent = document.getElementById('target-date').value;
+        document.getElementById('history-close').textContent = `$${closePrice.toFixed(2)}`;
+        document.getElementById('history-cash').textContent = `$${totalCash.toLocaleString()}`;
+        document.getElementById('history-holdings').textContent = `${holdingsQty}주`;
+        document.getElementById('history-round').textContent = `${currentRound}회차`;
     }
 </script>
 </body>
