@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스위치 기법 자동 퉁치기 시스템</title>
+    <title>스위치 1·2·3 멀티 자동 퉁치기 시스템</title>
     
     <!-- Firebase SDK 불러오기 -->
     <script type="module">
@@ -56,30 +56,70 @@
 
         async function loadCloudData() {
             try {
-                const docSnap = await getDoc(doc(db, "appData", "switchAutoState"));
+                const docSnap = await getDoc(doc(db, "appData", "switchMultiState"));
                 if (docSnap.exists()) {
-                    let data = docSnap.data();
-                    if(data.closePrice) document.getElementById('close-price').value = data.closePrice;
-                    if(data.totalRounds) document.getElementById('total-rounds').value = data.totalRounds;
-                    if(data.targetDropPct) document.getElementById('target-drop-pct').value = data.targetDropPct;
-                    if(data.currentRound) document.getElementById('current-round').value = data.currentRound;
-                    if(data.qtyPerRound) document.getElementById('qty-per-round').value = data.qtyPerRound;
+                    let d = docSnap.data();
+                    if(d.closePrice) document.getElementById('close-price').value = d.closePrice;
+                    
+                    // Switch 1
+                    if(d.s1_rounds) document.getElementById('s1-rounds').value = d.s1_rounds;
+                    if(d.s1_drop) document.getElementById('s1-drop').value = d.s1_drop;
+                    if(d.s1_curr) document.getElementById('s1-curr').value = d.s1_curr;
+                    if(d.s1_qty) document.getElementById('s1-qty').value = d.s1_qty;
+
+                    // Switch 2
+                    if(d.s2_rounds) document.getElementById('s2-rounds').value = d.s2_rounds;
+                    if(d.s2_drop) document.getElementById('s2-drop').value = d.s2_drop;
+                    if(d.s2_curr) document.getElementById('s2-curr').value = d.s2_curr;
+                    if(d.s2_qty) document.getElementById('s2-qty').value = d.s2_qty;
+
+                    // Switch 3
+                    if(d.s3_rounds) document.getElementById('s3-rounds').value = d.s3_rounds;
+                    if(d.s3_drop) document.getElementById('s3-drop').value = d.s3_drop;
+                    if(d.s3_curr) document.getElementById('s3-curr').value = d.s3_curr;
+                    if(d.s3_qty) document.getElementById('s3-qty').value = d.s3_qty;
+
+                    if(d.history) window.appHistory = d.history;
                 }
             } catch (e) { console.error("데이터 로드 실패:", e); }
-            calculateSwitchOrders();
+            calculateAndRender();
         }
 
-        window.saveAndCalculate = async function() {
-            calculateSwitchOrders();
+        window.saveAndExecute = async function() {
+            calculateAndRender();
+            
+            // 히스토리에 현재 상태 추가
+            let entry = {
+                date: document.getElementById('target-date').value,
+                closePrice: document.getElementById('close-price').value,
+                s1: document.getElementById('s1-curr').value,
+                s2: document.getElementById('s2-curr').value,
+                s3: document.getElementById('s3-curr').value,
+                timestamp: new Date().toLocaleString()
+            };
+            
+            if(!window.appHistory) window.appHistory = [];
+            window.appHistory.unshift(entry); // 최신순 정렬
+            if(window.appHistory.length > 20) window.appHistory.pop(); // 최대 20개 유지
+
             try {
-                await setDoc(doc(db, "appData", "switchAutoState"), {
+                await setDoc(doc(db, "appData", "switchMultiState"), {
                     closePrice: document.getElementById('close-price').value,
-                    totalRounds: document.getElementById('total-rounds').value,
-                    targetDropPct: document.getElementById('target-drop-pct').value,
-                    currentRound: document.getElementById('current-round').value,
-                    qtyPerRound: document.getElementById('qty-per-round').value,
-                    updatedAt: new Date().toISOString()
+                    s1_rounds: document.getElementById('s1-rounds').value,
+                    s1_drop: document.getElementById('s1-drop').value,
+                    s1_curr: document.getElementById('s1-curr').value,
+                    s1_qty: document.getElementById('s1-qty').value,
+                    s2_rounds: document.getElementById('s2-rounds').value,
+                    s2_drop: document.getElementById('s2-drop').value,
+                    s2_curr: document.getElementById('s2-curr').value,
+                    s2_qty: document.getElementById('s2-qty').value,
+                    s3_rounds: document.getElementById('s3-rounds').value,
+                    s3_drop: document.getElementById('s3-drop').value,
+                    s3_curr: document.getElementById('s3-curr').value,
+                    s3_qty: document.getElementById('s3-qty').value,
+                    history: window.appHistory
                 });
+                renderHistoryTable();
             } catch (e) { console.error("클라우드 저장 실패:", e); }
         }
     </script>
@@ -89,28 +129,37 @@
         body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f5f7; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; color: #333; }
         #login-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 400px; text-align: center; }
         .google-btn { width: 100%; padding: 12px; background: #fff; border: 1px solid #cbd5e0; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        #app-screen { display: none; width: 100%; max-width: 900px; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 30px; }
-        .control-box { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
-        .input-group { display: flex; flex-direction: column; gap: 5px; }
+        #app-screen { display: none; width: 100%; max-width: 1000px; background: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 30px; }
+        
+        .top-banner { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; display: flex; gap: 15px; align-items: center; justify-content: center; flex-wrap: wrap; }
+        
+        .switch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+        .switch-card { background: #fafbfc; border: 1px solid #cbd5e0; border-radius: 8px; padding: 15px; }
+        .switch-title { font-size: 14px; font-weight: bold; text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; color: #2b6cb0; }
+        
+        .input-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
         .input-group label { font-size: 11px; font-weight: bold; color: #4a5568; }
-        .input-group input { padding: 8px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 14px; }
+        .input-group input { padding: 6px; border: 1px solid #cbd5e0; border-radius: 6px; text-align: center; font-size: 13px; }
+
         .execute-btn { width: 100%; padding: 14px; background: #2b6cb0; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .execute-btn:hover { background: #2c5282; }
-        
-        .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
-        .result-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; min-height: 220px; }
-        .card-title { font-size: 13px; font-weight: bold; text-align: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #edf2f7; }
-        .title-buy { color: #e53e3e; }
-        .title-sell { color: #3182ce; }
-        .order-item { display: flex; justify-content: space-between; padding: 6px 10px; margin-bottom: 5px; border-radius: 5px; font-size: 13px; border: 1px solid #edf2f7; background: #fafbfc; font-weight: bold; }
-        .summary-box { background: #ebf8ff; border: 1px solid #90cdf4; border-radius: 8px; padding: 15px; text-align: center; font-size: 14px; color: #2b6cb0; line-height: 1.5; }
+
+        .result-section { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .result-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; min-height: 180px; }
+        .box-title { font-size: 13px; font-weight: bold; text-align: center; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #edf2f7; }
+        .order-item { display: flex; justify-content: space-between; padding: 5px 8px; margin-bottom: 4px; border-radius: 4px; font-size: 12px; border: 1px solid #edf2f7; background: #fafbfc; font-weight: bold; }
+
+        .history-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; }
+        th, td { border: 1px solid #e2e8f0; padding: 8px; }
+        th { background: #f7fafc; color: #4a5568; }
     </style>
 </head>
 <body>
 
 <div id="login-screen">
-    <h2>🔒 스위치 자동화 보안 로그인</h2>
-    <p>지정된 관리자 계정으로만 접속 가능합니다.</p>
+    <h2>🔒 스위치 멀티 보안 로그인</h2>
+    <p>관리자 계정으로만 접속 가능합니다.</p>
     <button class="google-btn" onclick="loginWithGoogle()">구글 계정으로 로그인</button>
 </div>
 
@@ -120,106 +169,141 @@
         <button onclick="logout()" style="background:none; border:1px solid #cbd5e0; padding:3px 8px; border-radius:4px; cursor:pointer; color:#e53e3e; font-weight:bold;">로그아웃</button>
     </div>
 
-    <h2 style="text-align:center; color:#1a365d; margin-bottom:20px;">⚡ 스위치 기법 자동 퉁치기 시스템</h2>
+    <h2 style="text-align:center; color:#1a365d; margin-bottom:20px;">⚡ 스위치 1·2·3 멀티 자동 퉁치기 시스템</h2>
 
-    <div class="control-box">
+    <!-- 공통 입력 -->
+    <div class="top-banner">
         <div class="input-group">
             <label>📅 기준 날짜</label>
             <input type="date" id="target-date">
         </div>
         <div class="input-group">
             <label>💵 당일 종가 ($)</label>
-            <input type="number" step="0.01" id="close-price" value="106.44" oninput="saveAndCalculate()">
-        </div>
-        <div class="input-group">
-            <label>🔄 총 회차</label>
-            <input type="number" id="total-rounds" value="20" oninput="saveAndCalculate()">
-        </div>
-        <div class="input-group">
-            <label>📉 매수 목표 하락률 (%)</label>
-            <input type="number" step="0.1" id="target-drop-pct" value="20" oninput="saveAndCalculate()">
-        </div>
-        <div class="input-group">
-            <label>🔢 현재 진행 회차</label>
-            <input type="number" id="current-round" value="4" oninput="saveAndCalculate()">
-        </div>
-        <div class="input-group">
-            <label>📦 회당 수량 (주)</label>
-            <input type="number" id="qty-per-round" value="10" oninput="saveAndCalculate()">
+            <input type="number" step="0.01" id="close-price" value="106.44" oninput="calculateAndRender()">
         </div>
     </div>
 
-    <button class="execute-btn" onclick="saveAndCalculate()">스위치 계산 및 클라우드 동기화 실행</button>
-
-    <div class="result-grid">
-        <div class="result-card">
-            <div class="card-title title-buy">🔴 매수 LOC 주문 목록 (방식 ① & ②)</div>
-            <div id="buy-order-list"></div>
+    <!-- 스위치 1, 2, 3 설정 그리드 -->
+    <div class="switch-grid">
+        <!-- Switch 1 -->
+        <div class="switch-card">
+            <div class="switch-title">🔵 스위치 1 설정</div>
+            <div class="input-group"><label>총 회차</label><input type="number" id="s1-rounds" value="20" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>목표 하락률 (%)</label><input type="number" step="0.1" id="s1-drop" value="20" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>현재 진행 회차</label><input type="number" id="s1-curr" value="4" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>회당 수량 (주)</label><input type="number" id="s1-qty" value="10" oninput="calculateAndRender()"></div>
         </div>
-        <div class="result-card">
-            <div class="card-title title-sell">🔵 매도 / 퉁치기 주문 목록</div>
-            <div id="sell-order-list"></div>
+        <!-- Switch 2 -->
+        <div class="switch-card">
+            <div class="switch-title" style="color:#d69e2e;">🟡 스위치 2 설정</div>
+            <div class="input-group"><label>총 회차</label><input type="number" id="s2-rounds" value="15" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>목표 하락률 (%)</label><input type="number" step="0.1" id="s2-drop" value="15" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>현재 진행 회차</label><input type="number" id="s2-curr" value="2" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>회당 수량 (주)</label><input type="number" id="s2-qty" value="10" oninput="calculateAndRender()"></div>
+        </div>
+        <!-- Switch 3 -->
+        <div class="switch-card">
+            <div class="switch-title" style="color:#38a169;">🟢 스위치 3 설정</div>
+            <div class="input-group"><label>총 회차</label><input type="number" id="s3-rounds" value="10" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>목표 하락률 (%)</label><input type="number" step="0.1" id="s3-drop" value="10" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>현재 진행 회차</label><input type="number" id="s3-curr" value="1" oninput="calculateAndRender()"></div>
+            <div class="input-group"><label>회당 수량 (주)</label><input type="number" id="s3-qty" value="10" oninput="calculateAndRender()"></div>
         </div>
     </div>
 
-    <div class="summary-box" id="summary-display"></div>
+    <button class="execute-btn" onclick="saveAndExecute()">계산 실행 및 회차 기록 저장 (클라우드 동기화)</button>
+
+    <!-- 결과 영역 -->
+    <div class="result-section">
+        <div class="result-box">
+            <div class="box-title" style="color:#e53e3e;">🔴 통합 매수 LOC 주문 목록</div>
+            <div id="buy-orders-display"></div>
+        </div>
+        <div class="result-box">
+            <div class="box-title" style="color:#3182ce;">🔵 통합 매도 / 퉁치기 주문 목록</div>
+            <div id="sell-orders-display"></div>
+        </div>
+    </div>
+
+    <!-- 회차 기록 유지 테이블 -->
+    <div class="history-box">
+        <div style="font-weight:bold; font-size:13px; margin-bottom:10px; color:#1a365d;">📋 회차별 기록 및 실행 이력 (Cloud Log)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>기록 시간</th>
+                    <th>기준 날짜</th>
+                    <th>당일 종가</th>
+                    <th>스위치 1 회차</th>
+                    <th>스위치 2 회차</th>
+                    <th>스위치 3 회차</th>
+                </tr>
+            </thead>
+            <tbody id="history-table-body">
+                <tr><td colspan="6" style="color:#aaa;">저장된 기록이 없습니다.</td></tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <script>
     document.getElementById('target-date').value = new Date().toISOString().split('T')[0];
+    window.appHistory = [];
 
-    function calculateSwitchOrders() {
+    function calculateAndRender() {
         let closePrice = parseFloat(document.getElementById('close-price').value) || 0;
-        let totalRounds = parseInt(document.getElementById('total-rounds').value) || 20;
-        let targetDropPct = parseFloat(document.getElementById('target-drop-pct').value) || 20;
-        let currentRound = parseInt(document.getElementById('current-round').value) || 1;
-        let qtyPerRound = parseInt(document.getElementById('qty-per-round').value) || 10;
-
         if (closePrice <= 0) return;
 
-        // 1. 첫 번째 매수 방식 계산: 전일 종가 * (1 - (목표하락률 / 전체회차) * 진행회차)
-        let dropRatio = (targetDropPct / 100) / totalRounds * currentRound;
-        let method1BuyPrice = closePrice * (1 - dropRatio);
-
-        // 2. 두 번째 매수 방식 계산: 전일 종가 - 0.01
-        let method2BuyPrice = closePrice - 0.01;
-
-        // 매수 주문 리스트 구성
-        let buyOrders = [
-            { type: '매수·LOC (방식① 비율목표)', price: method1BuyPrice, qty: qtyPerRound },
-            { type: '매수·LOC (방식② 초밀착)', price: method2BuyPrice, qty: qtyPerRound }
+        let switches = [
+            { name: '스위치1', rounds: parseInt(document.getElementById('s1-rounds').value)||1, drop: parseFloat(document.getElementById('s1-drop').value)||1, curr: parseInt(document.getElementById('s1-curr').value)||1, qty: parseInt(document.getElementById('s1-qty').value)||10 },
+            { name: '스위치2', rounds: parseInt(document.getElementById('s2-rounds').value)||1, drop: parseFloat(document.getElementById('s2-drop').value)||1, curr: parseInt(document.getElementById('s2-curr').value)||1, qty: parseInt(document.getElementById('s2-qty').value)||10 },
+            { name: '스위치3', rounds: parseInt(document.getElementById('s3-rounds').value)||1, drop: parseFloat(document.getElementById('s3-drop').value)||1, curr: parseInt(document.getElementById('s3-curr').value)||1, qty: parseInt(document.getElementById('s3-qty').value)||10 }
         ];
 
-        // 3. 매도 / 추종 로직 시뮬레이션
-        // 방식 ① 매수 물량에 대한 기준 매도가 (종가보다 높거나 특정 기준)
-        let method1SellPrice = closePrice * (1 + (targetDropPct / 100) / totalRounds); 
-        // 방식 ② 매수 물량 추종 매도가 (종가보다 소폭 위 혹은 가격 추종)
-        let method2SellPrice = closePrice + 0.01;
-
-        let sellOrders = [
-            { type: '매도·LOC (방식① 기준분할)', price: method1SellPrice, qty: qtyPerRound },
-            { type: '매도·LOC (방식② 가격추종)', price: method2SellPrice, qty: qtyPerRound }
-        ];
-
-        // 화면 렌더링
         let buyHtml = '';
-        buyOrders.forEach(o => {
-            buyHtml += `<div class="order-item"><span style="color:#e53e3e;">${o.type} ($${o.price.toFixed(2)})</span><span style="color:#e53e3e;">${o.qty}주</span></div>`;
-        });
-        document.getElementById('buy-order-list').innerHTML = buyHtml;
-
         let sellHtml = '';
-        sellOrders.forEach(o => {
-            sellHtml += `<div class="order-item"><span style="color:#3182ce;">${o.type} ($${o.price.toFixed(2)})</span><span style="color:#3182ce;">${o.qty}주</span></div>`;
-        });
-        document.getElementById('sell-order-list').innerHTML = sellHtml;
 
-        let totalNeedMoney = (method1BuyPrice + method2BuyPrice) * qtyPerRound;
-        document.getElementById('summary-display').innerHTML = `
-            💡 <b>스위치 기법 자동 퉁치기 요약</b><br>
-            ➔ 현재 진행 회차 <b>${currentRound}회차</b> 기준, 신규 필요 예수금 약 <b>$${totalNeedMoney.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> 산출완료.<br>
-            <span style="font-size:12px; color:#4a5568;">설정값과 진행 상태는 변경 즉시 클라우드에 안전하게 자동 저장됩니다.</span>
-        `;
+        switches.forEach(s => {
+            // 매수 ① 방식 (비율 목표) & 매수 ② 방식 (초밀착)
+            let m1Price = closePrice * (1 - (s.drop / 100) / s.rounds * s.curr);
+            let m2Price = closePrice - 0.01;
+
+            // 매도 방식
+            let s1Price = closePrice * (1 + (s.drop / 100) / s.rounds);
+            let s2Price = closePrice + 0.01;
+
+            buyHtml += `<div class="order-item"><span style="color:#e53e3e;">[${s.name}] 매수① $${m1Price.toFixed(2)}</span><span style="color:#e53e3e;">${s.qty}주</span></div>`;
+            buyHtml += `<div class="order-item"><span style="color:#e53e3e;">[${s.name}] 매수②(초밀착) $${m2Price.toFixed(2)}</span><span style="color:#e53e3e;">${s.qty}주</span></div>`;
+
+            sellHtml += `<div class="order-item"><span style="color:#3182ce;">[${s.name}] 매도① $${s1Price.toFixed(2)}</span><span style="color:#3182ce;">${s.qty}주</span></div>`;
+            sellHtml += `<div class="order-item"><span style="color:#3182ce;">[${s.name}] 매도② $${s2Price.toFixed(2)}</span><span style="color:#3182ce;">${s.qty}주</span></div>`;
+        });
+
+        document.getElementById('buy-orders-display').innerHTML = buyHtml;
+        document.getElementById('sell-orders-display').innerHTML = sellHtml;
+    }
+
+    function renderHistoryTable() {
+        const tbody = document.getElementById('history-table-body');
+        if (!window.appHistory || window.appHistory.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="color:#aaa;">저장된 기록이 없습니다.</td></tr>`;
+            return;
+        }
+
+        let html = '';
+        window.appHistory.forEach(h => {
+            html += `
+                <tr>
+                    <td>${h.timestamp}</td>
+                    <td>${h.date}</td>
+                    <td>$${parseFloat(h.closePrice).toFixed(2)}</td>
+                    <td><b>${h.s1}회차</b></td>
+                    <td><b>${h.s2}회차</b></td>
+                    <td><b>${h.s3}회차</b></td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
     }
 </script>
 </body>
