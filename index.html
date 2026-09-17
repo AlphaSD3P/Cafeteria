@@ -927,7 +927,7 @@
             const currentDateStr = document.getElementById('currentDate').value;
             const currentDayRealBasePrice = parseFloat(document.getElementById('basePrice').value) || 0;
 
-            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr} 다음날 장마감 종가를 입력하세요:`);
+            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr} 장마감 종가를 입력하세요:`);
             if (closeStr === null || closeStr.trim() === '') return;
             
             const nextClosePrice = parseFloat(closeStr);
@@ -942,8 +942,11 @@
             let oldAnchorPrice = parseFloat(document.getElementById('anchorPrice').value) || currentDayRealBasePrice;
             let oldQty = parseInt(document.getElementById('totalQty').value);
 
+            // 당일 원본 떨법 상태 보존용
+            let rawDropsOnCurrentDay = getDropsFromScreen();
+
             let currentDropHoldings = [];
-            getDropsFromScreen().forEach(d => {
+            rawDropsOnCurrentDay.forEach(d => {
                 currentDropHoldings.push({price: d.price, qty: d.qty, date: d.date, matched: false});
             });
 
@@ -956,6 +959,7 @@
             let isUpDownBought = false;
             let isUpDownSold = false;
 
+            // 매수 체결 확인
             window.globalPendingBuys.forEach(order => {
                 if (nextClosePrice <= order.price) {
                     if (order.category === 'updown') {
@@ -967,6 +971,7 @@
                 }
             });
 
+            // 매도 체결 확인
             window.globalPendingSells.forEach(order => {
                 if (nextClosePrice >= order.price) {
                     if (order.category === 'updown') {
@@ -1026,11 +1031,11 @@
                 window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
             }
 
-            // 1️⃣ 현재 날짜(예: 9월 9일) 장부 데이터는 원래 입력값으로 안전하게 고정 보존
+            // 1️⃣ [수정 포인트] 당일 데이터에는 체결 전 원래 입력값 상태를 온전히 유지
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
                 baseBudget: currentBaseBudgetVal,
                 io: parseFloat(document.getElementById('dailyIo').value) || 0,
-                realizedProfit: realizedProfitAdd,
+                realizedProfit: 0, 
                 totalSteps: totalStepsLimit,
                 buyAmount: buyAmountPerStep,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
@@ -1038,9 +1043,10 @@
                 anchorPrice: oldAnchorPrice,
                 currentStep: oldStep,
                 totalQty: oldQty,
-                drops: currentDropHoldings.map(h => ({price: h.price, qty: h.qty, date: h.date}))
+                drops: JSON.parse(JSON.stringify(rawDropsOnCurrentDay)) 
             };
 
+            // 다음 날 날짜 계산
             let dateObj = new Date(currentDateStr);
             dateObj.setDate(dateObj.getDate() + 1);
             const yyyy = dateObj.getFullYear();
@@ -1052,7 +1058,7 @@
                 window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
             }
 
-            // 2️⃣ 다음 날짜(예: 9월 10일) 장부에만 체결 결과가 반영된 새로운 상태를 기법별로 완벽히 분리 이월
+            // 2️⃣ [수정 포인트] 체결 완료된 새로운 상태는 '다음 날' 데이터에만 이월
             window.strategyNames.forEach(st => {
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
@@ -1066,10 +1072,9 @@
                         anchorPrice: newAnchorPrice,
                         currentStep: newStep,
                         totalQty: newQty,
-                        drops: JSON.parse(JSON.stringify(finalDrops))
+                        drops: JSON.parse(JSON.stringify(finalDrops)) 
                     };
                 } else {
-                    // 다른 기법들은 기존 날짜의 데이터를 안전하게 승계
                     let prevStData = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
                     let carriedBudget = (prevStData.baseBudget || 0) + (prevStData.realizedProfit || 0);
                     window.dailyDatabase[nextDateStr][st] = {
@@ -1088,7 +1093,7 @@
             
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
 
-            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료! (실현손익: $${realizedProfitAdd.toFixed(2)}, 다음날 종가: $${nextClosePrice})${absorptionMsg}\n\n👉 [ ${nextDateStr} ](다음 날) 장부 데이터로 정상 이월되었습니다.`);
+            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료!\n- 당일 장부는 체결 전 상태로 보존됩니다.\n- 체결 내역($${nextClosePrice})은 다음날 [ ${nextDateStr} ] 장부로 이월되었습니다.${absorptionMsg}`);
         };
 
         window.updateTab1Calculations = function() {
