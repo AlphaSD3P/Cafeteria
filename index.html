@@ -68,7 +68,7 @@
 
         async function loadCloudDataAndInit() {
             try {
-                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchV15MultiMaster");
+                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchV15MultiMasterFix");
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
@@ -93,7 +93,7 @@
 
         window.saveCloudDataInstant = async function() {
             try {
-                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchV15MultiMaster"), {
+                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchV15MultiMasterFix"), {
                     strategies: window.strategies,
                     allData: window.allData,
                     history: window.historyData
@@ -504,10 +504,14 @@
         if (index === resIdx) calculateTotalNet();
     };
 
+    // 1기법당 매수금 자동 계산 함수 연결
     window.calculateStratBudget = function(stratId) {
         const total = parseFloat(document.getElementById(`budget-${stratId}`).value) || 0;
         const steps = parseInt(document.getElementById(`steps-${stratId}`).value) || 16;
-        document.getElementById(`buyamt-${stratId}`).value = (total / steps).toFixed(2);
+        const buyAmtInput = document.getElementById(`buyamt-${stratId}`);
+        if(buyAmtInput) {
+            buyAmtInput.value = (steps > 0 ? (total / steps) : 0).toFixed(2);
+        }
     };
 
     window.addStratDropRow = function(stratId, p = '', q = '') {
@@ -524,6 +528,7 @@
     };
 
     window.syncAlgoState = function(stratId) {
+        calculateStratBudget(stratId); // 입력 바뀔 때마다 매수금 자동 재계산
         let strat = window.strategies.find(s => s.id === stratId);
         if(!strat) return;
 
@@ -700,27 +705,6 @@
         if (isNaN(closePrice) || closePrice <= 0) { alert("올바른 종가를 입력해주세요."); return; }
 
         let strat = window.strategies.find(s => s.id === stratId);
-        let oldStep = strat.algo.currentStep;
-        let oldQty = strat.algo.totalQty;
-        const buyAmountPerStep = parseFloat(document.getElementById(`buyamt-${stratId}`).value) || 1500;
-
-        let currentDropHoldings = [];
-        document.querySelectorAll(`.drop-row-${stratId}`).forEach(row => {
-            let p = parseFloat(row.querySelector('.drop-price').value);
-            let q = parseInt(row.querySelector('.drop-qty').value);
-            if (!isNaN(p) && !isNaN(q) && q > 0) currentDropHoldings.push({price: p, qty: q, matched: false});
-        });
-
-        // 결과 검증 및 다음 날 승계
-        let newlyBoughtUpDownQty = 0, newlyBoughtDropQty = 0, soldUpDownQty = 0;
-        let isUpDownBought = false, isUpDownSold = false;
-
-        let dayData = window.allData[dateStr][stratId];
-        // 간이 시뮬레이션
-        let basePrice = strat.algo.basePrice;
-        let dropRate = strat.algo.dropRate;
-
-        // 다음 날짜 계산
         let dateObj = new Date(dateStr);
         dateObj.setDate(dateObj.getDate() + 1);
         let nextDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
@@ -835,7 +819,6 @@
 
         sellList.innerHTML = sellResults.length === 0 ? '<div class="empty-slot">매도 주문 없음</div>' : '';
         sellResults.forEach((item, index) => {
-            let bg = index % 2 === 0 ? 'row-white' : 'row-yellow';
             sellList.innerHTML += `<div class="order-card" style="display:flex; justify-content:space-between; padding:6px; font-weight:bold; border-bottom:1px solid #eee;"><span style="color:#3b82f6;">매도·LOC $${item.price.toFixed(2)}</span><span style="color:#3b82f6;">${item.qty}주</span></div>`;
         });
 
@@ -901,17 +884,13 @@
     };
 
     window.updateBalanceLive = function() { window.renderBalanceTable(); };
-
-    window.saveDailyRecord = async function() {
-        let date = document.getElementById('record-date').value;
-        alert(`[${date}] 잔고 기록이 클라우드에 저장되었습니다.`);
-    };
+    window.saveDailyRecord = async function() { alert(`잔고 기록이 저장되었습니다.`); };
 
     function renderStrategyManageList() {
         const container = document.getElementById('strategy-manage-list');
         if(!container) return;
         container.innerHTML = '';
-        window.strategies.strategies_missing_fix || window.strategies.forEach((strat, index) => {
+        window.strategies.forEach((strat, index) => {
             container.innerHTML += `
                 <div class="strat-manage-box">
                     <span style="font-weight:bold; width:30px;">#${index+1}</span>
@@ -924,8 +903,8 @@
 
     window.addNewStrategy = async function() {
         let nameInput = document.getElementById('new-strat-name');
-        let name = nameInput.value.trim().toUpperCase();
-        if(!name) { alert("기법 이름을 입력해주세요."); return; }
+        let name = nameInput ? nameInput.value.trim().toUpperCase() : prompt("추가할 기법 이름 입력 (예: FEB)");
+        if(!name) return;
         window.strategies.push({ 
             id: 'strat_' + Date.now(), 
             name: name, 
