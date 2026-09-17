@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V47 통합본)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V48 완벽 통합본)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -236,7 +236,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V47 - 전일 종가 자동 상속 기능 보완)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V48 - 기준운용금액 유지 및 자산 집계 완벽 보완)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -505,7 +505,6 @@
             return { 
                 baseBudget: 0, 
                 io: 0, 
-                realizedProfit: 0,
                 totalSteps: 0, 
                 buyAmount: 0, 
                 dropRate: 0, 
@@ -541,16 +540,14 @@
                     
                     if (lastData && lastData[st]) {
                         let prev = lastData[st];
-                        let carriedRealized = prev.realizedProfit || 0;
-                        let carriedBudget = (prev.baseBudget || 0) + carriedRealized;
-                        // 🔥 직전 날짜의 종가(basePrice)를 다음 날의 당일 기준 가격(basePrice)으로 자동 상속
+                        // 🔥 [수정 핵심] 기준운용금액(baseBudget)은 전일 값을 그대로 유지(이월)하고 당일 입출금(io)만 0으로 초기화
+                        let carriedBudget = prev.baseBudget || 0;
                         let carriedBasePrice = prev.basePrice || 0;
                         let carriedAnchorPrice = prev.anchorPrice || carriedBasePrice;
 
                         window.dailyDatabase[dateStr][st] = {
-                            baseBudget: carriedBudget,
-                            io: 0,
-                            realizedProfit: 0, 
+                            baseBudget: carriedBudget,      // 최초 설정한 기준운용금액 고정 유지
+                            io: 0,                          // 당일 입출금은 매일 새로 입력받도록 초기화
                             totalSteps: prev.totalSteps,
                             buyAmount: prev.buyAmount,
                             dropRate: prev.dropRate,
@@ -655,8 +652,6 @@
             if (!dateStr || !window.currentActiveStrategy) return;
 
             let drops = getDropsFromScreen();
-            let existingRealized = window.dailyDatabase[dateStr] && window.dailyDatabase[dateStr][window.currentActiveStrategy] ? 
-                                   (window.dailyDatabase[dateStr][window.currentActiveStrategy].realizedProfit || 0) : 0;
 
             if (!window.dailyDatabase[dateStr]) {
                 window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 } };
@@ -665,7 +660,6 @@
             window.dailyDatabase[dateStr][window.currentActiveStrategy] = {
                 baseBudget: parseFloat(document.getElementById('baseBudget').value) || 0,
                 io: parseFloat(document.getElementById('dailyIo').value) || 0,
-                realizedProfit: existingRealized,
                 totalSteps: parseInt(document.getElementById('totalStepsSetting').value) || 0,
                 buyAmount: parseFloat(document.getElementById('buyAmount').value) || 0,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0,
@@ -698,19 +692,15 @@
                 document.getElementById('totalProfitLoss').style.color = "#334155";
                 document.getElementById('totalReturnRate').value = "0.00 %";
                 document.getElementById('totalReturnRate').style.color = "#334155";
-                return { remainingCash: 0, remainingSteps: 0, totalAsset: 0, realizedProfit: 0 };
+                return { remainingCash: 0, remainingSteps: 0, totalAsset: 0 };
             }
 
             const dateStr = document.getElementById('currentDate').value;
             if(!window.dailyDatabase[dateStr] || !window.dailyDatabase[dateStr][window.currentActiveStrategy]) {
-                return { remainingCash: 0, remainingSteps: 0, totalAsset: 0, realizedProfit: 0 };
+                return { remainingCash: 0, remainingSteps: 0, totalAsset: 0 };
             }
             
-            let currentData = window.dailyDatabase[dateStr][window.currentActiveStrategy] || {};
-            let realizedProfit = currentData.realizedProfit || 0;
-
             const effectiveBudget = getEffectiveTotalBudget();
-            const totalBudget = effectiveBudget + realizedProfit;
             const buyAmountPerStep = parseFloat(document.getElementById('buyAmount').value) || 0;
             const updownQty = parseInt(document.getElementById('totalQty').value) || 0;
             const currentPrice = parseFloat(document.getElementById('basePrice').value) || 0;
@@ -726,9 +716,9 @@
 
             let updownCostSum = updownQty * anchorPrice;
             let totalCost = dropCostSum + updownCostSum;
-            if (totalCost > totalBudget) totalCost = totalBudget;
+            if (totalCost > effectiveBudget) totalCost = effectiveBudget;
 
-            let remainingCash = totalBudget - totalCost;
+            let remainingCash = effectiveBudget - totalCost;
             if (remainingCash < 0) remainingCash = 0;
 
             let remainingSteps = buyAmountPerStep > 0 ? (remainingCash / buyAmountPerStep) : 0;
@@ -739,6 +729,7 @@
             
             let totalAsset = remainingCash + totalEvalValue;
 
+            // 🔥 [수익률 산출 공식] 총자산 - 기준운용금액(입출금 포함)
             let totalProfitSum = totalAsset - effectiveBudget; 
             let totalReturn = effectiveBudget > 0 ? (totalProfitSum / effectiveBudget) * 100 : 0;
             if (Math.abs(totalReturn) < 0.01) totalReturn = 0;
@@ -757,7 +748,7 @@
             returnEl.value = (totalReturn > 0 ? "+" : "") + totalReturn.toFixed(2) + " %";
             returnEl.style.color = totalReturn > 0 ? "#ef4444" : (totalReturn < 0 ? "#3b82f6" : "#334155");
 
-            return { remainingCash, remainingSteps, totalAsset, realizedProfit };
+            return { remainingCash, remainingSteps, totalAsset };
         }
 
         window.generateTable = function() {
@@ -1006,7 +997,6 @@
             let newlyBoughtDropQty = 0;
             let soldUpDownQty = 0;
             let soldDropQty = 0;
-            let realizedProfitAdd = 0;
 
             let isUpDownBought = false;
             let isUpDownSold = false;
@@ -1027,13 +1017,11 @@
                     if (order.category === 'updown') {
                         soldUpDownQty += order.qty;
                         isUpDownSold = true;
-                        realizedProfitAdd += (nextClosePrice - oldAnchorPrice) * order.qty;
                     } else if (order.category === 'drop') {
                         let idx = currentDropHoldings.findIndex(h => !h.matched && Math.abs(h.price - order.price) < 0.001 && h.qty === order.qty);
                         if(idx !== -1) {
                             currentDropHoldings[idx].matched = true;
                             soldDropQty += order.qty;
-                            realizedProfitAdd += (nextClosePrice - currentDropHoldings[idx].price) * order.qty;
                         }
                     }
                 }
@@ -1075,7 +1063,10 @@
             }
 
             let currentBaseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
-            let nextEffectiveBudget = currentBaseBudgetVal + realizedProfitAdd;
+            let currentIoVal = parseFloat(document.getElementById('dailyIo').value) || 0;
+            
+            // 🔥 [결산 핵심 로직] 당일에 입출금이 있었다면 다음날 기준 운용금액(baseBudget)에 반영되어 누적됨
+            let nextBaseBudgetVal = currentBaseBudgetVal + currentIoVal;
 
             if(!window.dailyDatabase[currentDateStr]) {
                 window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
@@ -1083,8 +1074,7 @@
 
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
                 baseBudget: currentBaseBudgetVal,
-                io: parseFloat(document.getElementById('dailyIo').value) || 0,
-                realizedProfit: 0, 
+                io: currentIoVal,
                 totalSteps: totalStepsLimit,
                 buyAmount: buyAmountPerStep,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
@@ -1111,9 +1101,8 @@
             window.strategyNames.forEach(st => {
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
-                        baseBudget: nextEffectiveBudget,
-                        io: 0,                           
-                        realizedProfit: 0,
+                        baseBudget: nextBaseBudgetVal, // 입출금이 반영된 새로운 운용원금으로 이월
+                        io: 0,                           // 다음날 입출금은 다시 0으로 리셋
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
                         dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
@@ -1125,12 +1114,10 @@
                     };
                 } else {
                     let prevStData = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
-                    let carriedBudget = (prevStData.baseBudget || 0) + (prevStData.realizedProfit || 0);
                     window.dailyDatabase[nextDateStr][st] = {
                         ...prevStData,
-                        baseBudget: carriedBudget,
+                        baseBudget: (prevStData.baseBudget || 0) + (prevStData.io || 0),
                         io: 0,
-                        realizedProfit: 0,
                         drops: JSON.parse(JSON.stringify(prevStData.drops || []))
                     };
                 }
@@ -1170,24 +1157,25 @@
                     let totalH = (d.totalQty || 0) + dropQty;
                     let totalCost = ((d.totalQty || 0) * (d.anchorPrice || 0)) + dropCost;
                     
-                    let realized = d.realizedProfit || 0;
-                    let budget = (d.baseBudget || 0) + (d.io || 0) + realized;
-                    let cash = Math.max(0, budget - totalCost);
+                    // 실질 운용 원금 = 기준운용금액 + 당일 입출금
+                    let effectiveBudget = (d.baseBudget || 0) + (d.io || 0);
+                    let cash = Math.max(0, effectiveBudget - totalCost);
                     
                     let strategyClosePrice = d.basePrice || 0; 
                     let evalVal = totalH * strategyClosePrice;
-                    let profit = totalH > 0 ? (evalVal - totalCost) : 0;
+                    let totalAsset = cash + evalVal; // 총자산 = 잔여달러 + 주식평가액
                     
-                    let returnRate = (d.baseBudget || 0) > 0 ? ((profit + realized) / d.baseBudget) * 100 : 0;
+                    let profit = totalAsset - effectiveBudget; // 순수 손익 = 총자산 - 운용원금
+                    let returnRate = effectiveBudget > 0 ? (profit / effectiveBudget) * 100 : 0;
 
                     sumQty += totalH;
                     sumCash += cash;
-                    sumEval += evalVal + cash;
-                    sumProfit += (profit + realized);
-                    sumBudget += (d.baseBudget || 0);
+                    sumEval += totalAsset;
+                    sumProfit += profit;
+                    sumBudget += effectiveBudget;
 
-                    let profitClass = (profit + realized) >= 0 ? 'profit-text' : 'loss-text';
-                    let sign = (profit + realized) >= 0 ? '▲' : '▼';
+                    let profitClass = profit >= 0 ? 'profit-text' : 'loss-text';
+                    let sign = profit >= 0 ? '▲' : '▼';
 
                     tbody.innerHTML += `
                         <tr>
@@ -1195,10 +1183,10 @@
                             <td>${totalH}</td>
                             <td>$${strategyClosePrice.toFixed(2)}</td>
                             <td>$${cash.toFixed(2)}</td>
-                            <td>$${(evalVal + cash).toFixed(2)}</td>
-                            <td class="${profitClass}">$${(profit + realized).toFixed(2)}</td>
+                            <td>$${totalAsset.toFixed(2)}</td>
+                            <td class="${profitClass}">$${profit.toFixed(2)}</td>
                             <td class="${profitClass}">${sign} ${Math.abs(returnRate).toFixed(1)}%</td>
-                            <td>$${(d.baseBudget || 0).toFixed(0)}</td>
+                            <td>$${effectiveBudget.toFixed(0)}</td>
                         </tr>
                     `;
                 });
@@ -1236,7 +1224,8 @@
                     let pDropCost = (pd.drops || []).reduce((s, x) => s + (x.price * x.qty), 0);
                     let pH = (pd.totalQty || 0) + pDropQty;
                     let pCost = ((pd.totalQty || 0) * (pd.anchorPrice || 0)) + pDropCost;
-                    let pCash = Math.max(0, (pd.baseBudget || 0) - pCost);
+                    let pEffectiveBudget = (pd.baseBudget || 0) + (pd.io || 0);
+                    let pCash = Math.max(0, pEffectiveBudget - pCost);
                     let pStrategyClose = pd.basePrice || 0;
                     prevSumEval += (pH * pStrategyClose) + pCash;
                 });
@@ -1288,16 +1277,15 @@
                     let dropCost = (d.drops || []).reduce((s, x) => s + (x.price * x.qty), 0);
                     let hQty = (d.totalQty || 0) + dropQty;
                     let cost = ((d.totalQty || 0) * (d.anchorPrice || 0)) + dropCost;
-                    let realized = d.realizedProfit || 0;
-                    let budget = (d.baseBudget || 0) + (d.io || 0) + realized;
-                    let cash = Math.max(0, budget - cost);
+                    let effectiveBudget = (d.baseBudget || 0) + (d.io || 0);
+                    let cash = Math.max(0, effectiveBudget - cost);
                     let strategyClose = d.basePrice || 0;
                     let evalVal = (hQty * strategyClose) + cash;
-                    let profit = hQty > 0 ? (hQty * strategyClose - cost) : 0;
+                    let profit = evalVal - effectiveBudget;
 
                     tQty += hQty;
                     tEvalUsd += evalVal;
-                    tProfitUsd += (profit + realized);
+                    tProfitUsd += profit;
 
                     bullets += `<li><b>${st}</b>: ${hQty}주 (종가 $${strategyClose.toFixed(2)}, 총합 $${evalVal.toFixed(2)})</li>`;
                 });
