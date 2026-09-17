@@ -984,14 +984,22 @@
             const currentDateStr = document.getElementById('currentDate').value;
             const currentDayRealBasePrice = parseFloat(document.getElementById('basePrice').value) || 0;
 
-            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr} 장마감 종가를 입력하세요:`);
-            if (closeStr === null || closeStr.trim() === '') return;
-            
-            const nextClosePrice = parseFloat(closeStr);
-            if (isNaN(nextClosePrice) || nextClosePrice <= 0) {
-                alert("올바른 종가를 입력해주세요.");
+            // 🔥 [핵심 수정] 종가를 prompt() 창에서 "다시" 입력받지 않습니다.
+            // 기존 버전은 화면 상단의 "당일 기준 가격(오늘 종가)" 입력창과, 결산 시 뜨는
+            // prompt() 창에 종가를 "두 번" 따로 입력해야 했습니다. 이 둘의 값이 서로
+            // 다르게 입력되면(오타, 갱신 누락 등) 주문 생성(generateTable)과 실제 체결
+            // 판정(아래 로직), 그리고 잔고&일별기록의 평가총합/누적손익률이 서로 다른
+            // 종가를 기준으로 계산되어 정보가 어긋나는 문제가 발생했습니다.
+            // 이제는 이미 "당일 기준 가격(오늘 종가)" 칸에 입력해 둔 값을 그대로
+            // 오늘의 확정 종가로 사용하여, 주문 생성 → 체결 판정 → 잔고 기록이
+            // 항상 동일한 종가를 기준으로 일관되게 계산되도록 했습니다.
+            if (!currentDayRealBasePrice || currentDayRealBasePrice <= 0) {
+                alert("먼저 위쪽 '당일 기준 가격 (오늘 종가)' 칸에 오늘자 실제 종가를 입력한 뒤,\n다시 [다음날 장마감 종가] 버튼을 눌러주세요.");
                 return;
             }
+            if (!confirm(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr}\n장마감 종가를 $${currentDayRealBasePrice.toFixed(2)} 로 확정하고 결산하시겠습니까?\n\n(※ 이 값은 위쪽 '당일 기준 가격(오늘 종가)' 입력창의 값입니다. 값이 다르면 취소 후 먼저 수정해주세요.)`)) return;
+
+            const nextClosePrice = currentDayRealBasePrice;
 
             let oldStep = parseInt(document.getElementById('currentStep').value);
             let totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
