@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>알고리즘 스위치 매매 & 잔고 일별 기록 대시보드</title>
+    <title>알고리즘 스위치 매매 & 보안 로그인 연동</title>
     
     <!-- Firebase SDK (App, Firestore, Auth) 불러오기 -->
     <script type="module">
@@ -11,6 +11,9 @@
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
+        // ==========================================
+        // 1. [필수] 파이어베이스 설정값 (기존 보안.html 정보 유지)
+        // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyDeULQ3tftmP7itfEmXYEdqSWorIOdlwrs",
             authDomain: "cafeteria-investing.firebaseapp.com",
@@ -20,6 +23,9 @@
             appId: "1:405486491315:web:2bbabc9ac8cbcbaa3cc2c6"
         };
 
+        // ==========================================
+        // 2. [필수] 접속을 허용할 관리자 이메일
+        // ==========================================
         const OWNER_EMAIL = "alphasd3p@gmail.com";
 
         const app = initializeApp(firebaseConfig);
@@ -49,6 +55,7 @@
             const userEmailDisplay = document.getElementById('user-email-display');
 
             if (user) {
+                // 권한 체크
                 if (user.email !== OWNER_EMAIL) {
                     alert(`🚫 접근 권한이 없습니다!\n\n현재 계정: ${user.email}\n이 앱은 오직 지정된 관리자 계정만 사용할 수 있습니다.`);
                     await signOut(auth);
@@ -57,7 +64,7 @@
 
                 loginScreen.style.display = 'none';
                 appScreen.style.display = 'block';
-                if(userEmailDisplay) userEmailDisplay.textContent = `접속 계정: ${user.email}`;
+                if(userEmailDisplay) userEmailDisplay.textContent = `보안 접속: ${user.email}`;
 
                 await loadCloudDataAndInit();
             } else {
@@ -68,63 +75,67 @@
 
         async function loadCloudDataAndInit() {
             try {
-                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchV15MultiMasterFix");
+                // 문서 이름을 'switchTradingData'로 분리하여 기존 퉁치기 데이터와 꼬이지 않게 함
+                const docRef = doc(db, "appData", "switchTradingData");
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
                     const cloudVal = docSnap.data();
-                    window.strategies = cloudVal.strategies || getDefaultStrategies();
-                    window.allData = cloudVal.allData || {};
-                    window.historyData = cloudVal.history || [];
+                    window.dailyDatabase = cloudVal.dailyDatabase || {};
                 } else {
-                    window.strategies = getDefaultStrategies();
-                    window.allData = {};
-                    window.historyData = [];
-                    await saveCloudDataInstant();
+                    window.dailyDatabase = {};
+                    await window.saveCloudDataInstant();
                 }
             } catch (e) {
                 console.error("클라우드 로드 실패:", e);
-                window.strategies = getDefaultStrategies();
-                window.allData = {};
-                window.historyData = [];
+                window.dailyDatabase = {};
             }
-            window.initAppUI();
+            
+            // 데이터 로드 후 가장 최신 날짜로 세팅하거나, 없으면 오늘 날짜로 세팅
+            let sortedDates = Object.keys(window.dailyDatabase).sort();
+            let targetDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : getTodayStr();
+            document.getElementById('currentDate').value = targetDate;
+            
+            // UI 초기화 시작 (인스5 로직 실행)
+            window.onDateChange();
         }
 
+        // 클라우드 저장 (잦은 입력 시 서버 과부하 방지를 위한 Debounce 적용)
+        let saveTimeout = null;
         window.saveCloudDataInstant = async function() {
-            try {
-                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchV15MultiMasterFix"), {
-                    strategies: window.strategies,
-                    allData: window.allData,
-                    history: window.historyData
-                });
-            } catch (e) {
-                console.error("클라우드 저장 실패:", e);
-            }
+            if(saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(async () => {
+                try {
+                    await setDoc(doc(db, "appData", "switchTradingData"), {
+                        dailyDatabase: window.dailyDatabase
+                    });
+                } catch (e) {
+                    console.error("클라우드 저장 실패:", e);
+                }
+            }, 800); // 0.8초 후 자동 저장
         };
 
         window.db = db;
-        window.doc = doc;
-        window.setDoc = setDoc;
     </script>
 
     <style>
-        * { box-sizing: border-box; }
-        body {
-            font-family: 'Malgun Gothic', sans-serif;
-            background-color: #f4f6f9;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+        body { 
+            font-family: 'Malgun Gothic', sans-serif; 
+            background-color: #f4f6f9; 
             margin: 0;
             padding: 20px;
             color: #334155;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
         }
 
+        /* 로그인 화면 CSS */
         #login-screen {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 400px; text-align: center;
+            margin-top: 10vh;
         }
         #login-screen h2 { color: #1e3a8a; margin-bottom: 10px; font-size: 22px; }
         #login-screen p { color: #64748b; font-size: 13px; margin-bottom: 25px; }
@@ -135,809 +146,888 @@
         }
         .google-login-btn:hover { background-color: #f8fafc; }
 
-        #app-screen { display: none; width: 100%; max-width: 1100px; background-color: #fff; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 30px; }
-        .header { text-align: center; margin-bottom: 25px; position: relative; }
-        .header h2 { color: #1e3a8a; margin: 0 0 8px 0; font-size: 24px; }
-        .subtitle { color: #64748b; font-size: 14px; }
-        .user-info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; background: #f8fafc; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; }
-        .logout-btn { background: none; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 4px; cursor: pointer; color: #ef4444; font-weight: bold; }
+        /* 메인 앱 화면 CSS (인스5 + 보안 결합) */
+        #app-screen { 
+            display: none; 
+            width: 100%; 
+            max-width: 1250px; 
+            background-color: white; 
+            padding: 22px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+        }
+
+        .user-info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; background: #f8fafc; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
+        .logout-btn { background: none; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 4px; cursor: pointer; color: #ef4444; font-weight: bold; font-size: 12px;}
         .logout-btn:hover { background: #fef2f2; }
 
-        .tabs { display: flex; border-bottom: 2px solid #e2e8f0; margin-bottom: 20px; flex-wrap: wrap; gap: 5px; }
-        .tab-btn { padding: 10px 15px; background: none; border: none; font-size: 14px; font-weight: bold; color: #64748b; cursor: pointer; text-align: center; }
-        .tab-btn.active { color: #1e3a8a; border-bottom: 3px solid #1e3a8a; margin-bottom: -2px; }
+        .header { text-align: center; margin-bottom: 18px; }
+        h2 { color: #1e3a8a; margin: 0 0 6px 0; font-size: 21px; }
+        .subtitle { color: #64748b; font-size: 12px; }
+        
+        .tabs { border-bottom: 2px solid #e2e8f0; margin-bottom: 15px; display: flex; gap: 20px; }
+        .tabs div { padding: 8px 12px; color: #64748b; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .tabs .active { color: #1e3a8a; border-bottom: 3px solid #1e3a8a; margin-bottom: -2px; }
         .tab-content { display: none; }
-        .tab-content.active { display: block; }
+        .tab-content.active-content { display: block; }
 
-        .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
-        .top-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px dashed #cbd5e1; }
-        .split-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .card-half { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
-        .card-title { font-weight: bold; color: #475569; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; }
-
-        .input-group { display: flex; flex-direction: column; gap: 5px; }
-        .input-group label { font-size: 13px; font-weight: bold; color: #334155; }
-        .input-group input { padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 14px; text-align: right; }
+        .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+        .top-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
+        .triple-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        .card-box { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; box-sizing: border-box; }
+        
+        .card-title { font-weight: bold; color: #475569; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 6px; font-size: 13px; }
+        .input-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+        .input-group:last-child { margin-bottom: 0; }
+        .input-group label { font-size: 11px; font-weight: bold; }
+        .input-group input { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; text-align: right; box-sizing: border-box; width: 100%; outline: none; }
+        .input-group input:focus { border-color: #3b82f6; }
         .input-group input[readonly] { background-color: #f1f5f9; color: #64748b; cursor: not-allowed; }
         .input-group input[type="date"] { text-align: center; }
 
-        .drop-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; margin-bottom: 8px; }
-        .btn-small { background-color: #ef4444; color: white; border: none; border-radius: 4px; padding: 0 10px; cursor: pointer; font-weight: bold; }
-        .btn-small:hover { background-color: #dc2626; }
-        .btn-add { background-color: #f1f5f9; color: #3b82f6; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 8px; width: 100%; cursor: pointer; font-weight: bold; margin-top: 5px; }
-        .btn-add:hover { background-color: #e2e8f0; }
+        .drop-row-item { display: grid; grid-template-columns: 45px 1fr 55px 95px; gap: 4px; align-items: center; margin-bottom: 6px; font-size: 11px; font-weight: bold; color: #64748b; }
+        .drop-row-item input { font-size: 11px !important; padding: 5px 3px !important; }
 
-        .action-row { display: flex; gap: 15px; margin-top: 20px; }
-        .btn-generate { background-color: #22c55e; color: white; border: none; padding: 14px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; flex: 1; }
+        .action-row { display: flex; gap: 12px; margin-top: 15px; }
+        .btn-generate { background-color: #22c55e; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; }
         .btn-generate:hover { background-color: #16a34a; }
-        .btn-nextday { background-color: #3b82f6; color: white; border: none; padding: 14px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 15px; flex: 1; }
+        .btn-nextday { background-color: #3b82f6; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; }
         .btn-nextday:hover { background-color: #2563eb; }
 
-        .result-section { margin-top: 25px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; }
-        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 16px; margin-bottom: 12px; border-left: 4px solid #ef4444; padding-left: 10px; }
-        .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 16px; margin-bottom: 12px; border-left: 4px solid #3b82f6; padding-left: 10px; }
+        .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; }
+        .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #3b82f6; padding-left: 8px; }
         
-        table { width: 100%; border-collapse: collapse; text-align: center; background: white; margin-bottom: 10px; font-size: 14px; }
-        th, td { border: 1px solid #cbd5e1; padding: 10px; }
+        table { width: 100%; border-collapse: collapse; text-align: center; background: white; margin-bottom: 8px; font-size: 12px; }
+        th, td { border: 1px solid #cbd5e1; padding: 7px; }
         th { background-color: #f1f5f9; font-weight: bold; }
+        tbody tr:nth-child(odd) { background-color: #ffffff; }
+        tbody tr:nth-child(even) { background-color: #fefce8; }
         
         .price-col { font-weight: bold; color: #ef4444; }
         .qty-col { font-weight: bold; color: #f59e0b; }
         .label-updown { color: #ea580c; font-weight: bold; }
         .label-drop { color: #9333ea; font-weight: bold; }
         .label-joint { color: #059669; font-weight: bold; }
-        .info-box { background-color: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 10px; border-radius: 4px; font-size: 13px; margin-bottom: 15px; }
 
-        /* 잔고 및 퉁치기 스타일 */
-        .balance-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #cbd5e1; table-layout: fixed; }
-        .balance-table th, .balance-table td { border: 1px solid #cbd5e1; padding: 6px 3px; text-align: center; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .balance-table th { background-color: #f1f5f9; color: #475569; font-weight: bold; }
-        .balance-table tfoot td { background-color: #e2e8f0; font-weight: bold; color: #1e3a8a; }
-        .balance-table input { width: 100%; height: 28px; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; font-size: 11px; background-color: #fff; }
-
-        .krw-summary-box { margin-top: 12px; background: #f0fff4; border: 1px solid #9ae6b4; border-radius: 6px; padding: 12px 15px; font-size: 13px; color: #276749; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px; }
-        .krw-summary-box b { font-size: 15px; color: #22543d; }
-        .history-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
-        .history-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 10px; font-weight: bold; color: #1e3a8a; font-size: 14px; }
-        .history-body-grid { display: flex; gap: 20px; align-items: center; justify-content: space-between; }
-        .strat-manage-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; display: flex; gap: 10px; align-items: center; }
-        .dual-tables-container { display: flex; gap: 15px; align-items: flex-start; }
-        .order-column { flex: 1; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; min-height: 200px; }
+        .info-box { background-color: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 10px; }
+        .empty-message { text-align: center; color: #94a3b8; font-size: 12px; padding: 20px; }
+        .btn-small { background: white; border: 1px solid #cbd5e1; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; color: #475569; }
+        .btn-small:hover { background: #f1f5f9; }
     </style>
 </head>
 <body>
 
-<!-- 1. 구글 로그인 화면 -->
-<div id="login-screen">
-    <h2>🔒 스위치 매매 보안 로그인</h2>
-    <p>지정된 관리자 구글 계정으로만<br>접속할 수 있습니다.</p>
-    <button class="google-login-btn" onclick="loginWithGoogle()">
-        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.19-1.84H9v3.48h4.84c-.21 1.12-.84 2.07-1.79 2.71v2.25h2.9c1.7-1.57 2.69-3.88 2.69-6.6z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.25c-.81.54-1.85.86-3.06.86-2.34 0-4.33-1.58-5.04-3.71H.95v2.32C2.43 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.96 10.72c-.18-.54-.28-1.12-.28-1.72s.1-1.18.28-1.72V4.96H.95C.35 6.15 0 7.52 0 9s.35 2.85.95 4.04l3.01-2.32z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0 5.48 0 2.43 2.02.95 4.96l3.01 2.32c.71-2.13 2.7-3.7 5.04-3.7z"/></svg>
-        구글 계정으로 로그인
-    </button>
-</div>
-
-<!-- 2. 실제 메인 앱 화면 -->
-<div id="app-screen">
-    <div class="user-info-bar">
-        <span id="user-email-display">접속 계정 확인 중...</span>
-        <button class="logout-btn" onclick="logout()">로그아웃</button>
+    <!-- 1. 구글 로그인 화면 -->
+    <div id="login-screen">
+        <h2>🔒 보안 인증 로그인</h2>
+        <p>클라우드 동기화를 위해<br>관리자 구글 계정으로 로그인해 주세요.</p>
+        <button class="google-login-btn" onclick="loginWithGoogle()">
+            <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.19-1.84H9v3.48h4.84c-.21 1.12-.84 2.07-1.79 2.71v2.25h2.9c1.7-1.57 2.69-3.88 2.69-6.6z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.25c-.81.54-1.85.86-3.06.86-2.34 0-4.33-1.58-5.04-3.71H.95v2.32C2.43 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.96 10.72c-.18-.54-.28-1.12-.28-1.72s.1-1.18.28-1.72V4.96H.95C.35 6.15 0 7.52 0 9s.35 2.85.95 4.04l3.01-2.32z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0 5.48 0 2.43 2.02.95 4.96l3.01 2.32c.71-2.13 2.7-3.7 5.04-3.7z"/></svg>
+            구글 계정으로 시작하기
+        </button>
     </div>
 
-    <div class="header">
-        <h2>알고리즘 스위치 매매 & 잔고 일별 기록 대시보드</h2>
-        <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V15 멀티 기법 지원)</div>
-    </div>
+    <!-- 2. 실제 메인 앱 화면 (인스5 알고리즘 기반) -->
+    <div id="app-screen">
+        <div class="user-info-bar">
+            <span id="user-email-display" style="font-weight: bold;">접속 계정 확인 중...</span>
+            <button class="logout-btn" onclick="logout()">로그아웃 🔒</button>
+        </div>
 
-    <div class="tabs" id="tab-buttons"></div>
-    <div id="tab-contents"></div>
-</div>
+        <div class="header">
+            <h2>알고리즘 스위치 매매 & 잔고 일별 기록</h2>
+            <div class="subtitle">파이어베이스 클라우드 실시간 동기화 시스템 (V41 - 누적 실현손익 완벽 반영)</div>
+        </div>
 
-<script>
-    window.strategies = [];
-    window.allData = {};
-    window.historyData = [];
-    const chartColors = ['#1e3a8a', '#ef4444', '#f59e0b', '#22c55e', '#9333ea', '#06b6d4', '#ea580c'];
+        <div class="tabs">
+            <div class="active" onclick="switchTab(0)">📊 자동 주문 생성기</div>
+            <div onclick="switchTab(1)">📉 잔고&일별기록</div>
+            <div onclick="switchTab(2)">⚙️ 기법 설명</div>
+        </div>
 
-    function getDefaultStrategies() {
-        return [
-            { 
-                id: 'strat_jan', 
-                name: 'JAN', 
-                defaultMult: 1, 
-                defaultCash: 50000, 
-                defaultShares: 0, 
-                defaultAvg: 0, 
-                defaultInit: 50000,
-                algo: {
-                    currentDate: "2026-09-20",
-                    totalBudget: 24000,
-                    totalStepsSetting: 16,
-                    dropRate: 0.25,
-                    basePrice: 77.00,
-                    currentStep: 1,
-                    totalQty: 16,
-                    drops: []
-                }
-            }
-        ];
-    }
-
-    let saveTimeout = null;
-    function saveData() {
-        if (saveTimeout) clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => {
-            window.saveCloudDataInstant();
-        }, 500);
-    }
-
-    window.initAppUI = function() {
-        const tabBtns = document.getElementById('tab-buttons');
-        const tabContents = document.getElementById('tab-contents');
-
-        tabBtns.innerHTML = '';
-        tabContents.innerHTML = '';
-
-        // 1. 기법별 자동 주문 생성기 탭들 동적 생성
-        window.strategies.forEach((strat, index) => {
-            tabBtns.innerHTML += `<button class="tab-btn ${index === 0 ? 'active' : ''}" onclick="switchTab(${index})">📊 ${strat.name}</button>`;
-
-            let algo = strat.algo || {
-                currentDate: "2026-09-20",
-                totalBudget: 24000,
-                totalStepsSetting: 16,
-                dropRate: 0.25,
-                basePrice: 77.00,
-                currentStep: 1,
-                totalQty: 16,
-                drops: []
-            };
-
-            let dropsHtml = '';
-            (algo.drops || []).forEach(d => {
-                dropsHtml += `
-                    <div class="drop-row drop-row-${strat.id}">
-                        <input type="number" step="0.01" class="drop-price" placeholder="매수가($)" value="${d.price}" oninput="syncAlgoState('${strat.id}')">
-                        <input type="number" class="drop-qty" placeholder="수량" value="${d.qty}" oninput="syncAlgoState('${strat.id}')">
-                        <button class="btn-small" onclick="this.parentElement.remove(); syncAlgoState('${strat.id}');">X</button>
-                    </div>`;
-            });
-
-            tabContents.innerHTML += `
-                <div class="tab-content ${index === 0 ? 'active' : ''}" id="content-${index}">
-                    <div class="settings-panel">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                            <h3 style="margin:0; color:#1e3a8a;">⚡ ${strat.name} 자동 주문 생성기</h3>
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <label style="font-size:13px; font-weight:bold;">⚙️ 수량 배율:</label>
-                                <input type="number" id="mult-${strat.id}" value="${strat.defaultMult || 1}" min="1" oninput="saveData()" style="width:60px; padding:4px; text-align:center; border:1px solid #cbd5e1; border-radius:4px;">
-                                <span style="font-size:13px; font-weight:bold;">배</span>
-                            </div>
-                        </div>
-                        <div class="top-row">
-                            <div class="input-group">
-                                <label>📅 현재 거래일</label>
-                                <input type="date" id="date-${strat.id}" value="${algo.currentDate}" onchange="onStratDateChange('${strat.id}')">
-                            </div>
-                            <div class="input-group">
-                                <label>💰 전체 운용 금액($)</label>
-                                <input type="number" id="budget-${strat.id}" value="${algo.totalBudget}" oninput="calculateStratBudget('${strat.id}'); syncAlgoState('${strat.id}');">
-                            </div>
-                            <div class="input-group">
-                                <label>🔢 총 회차 선택</label>
-                                <input type="number" id="steps-${strat.id}" value="${algo.totalStepsSetting}" oninput="calculateStratBudget('${strat.id}'); syncAlgoState('${strat.id}');">
-                            </div>
-                            <div class="input-group">
-                                <label>🔒 1기법당 매수금($)</label>
-                                <input type="number" id="buyamt-${strat.id}" readonly>
-                            </div>
-                            <div class="input-group">
-                                <label>📉 하락간격(%)</label>
-                                <input type="number" id="drop-${strat.id}" step="0.01" value="${algo.dropRate}" oninput="syncAlgoState('${strat.id}')">
-                            </div>
-                        </div>
-
-                        <div class="split-row">
-                            <!-- 왼쪽: 업다운 -->
-                            <div class="card-half">
-                                <div class="card-title"><span style="color:#ea580c">■ 업다운 상태 입력</span></div>
-                                <div class="input-group" style="margin-bottom: 10px;">
-                                    <label>당일 기준 가격(종가)</label>
-                                    <input type="number" id="base-${strat.id}" step="0.01" value="${algo.basePrice}" oninput="syncAlgoState('${strat.id}')" style="font-weight:bold; color:#1e3a8a; background:#eff6ff;">
-                                </div>
-                                <div class="split-row" style="gap:10px;">
-                                    <div class="input-group">
-                                        <label>현재 회차</label>
-                                        <input type="number" id="round-${strat.id}" value="${algo.currentStep}" oninput="syncAlgoState('${strat.id}')">
-                                    </div>
-                                    <div class="input-group">
-                                        <label>누적 보유수량</label>
-                                        <input type="number" id="tqty-${strat.id}" value="${algo.totalQty}" oninput="syncAlgoState('${strat.id}')">
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 오른쪽: 떨법 -->
-                            <div class="card-half">
-                                <div class="card-title">
-                                    <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
-                                </div>
-                                <div id="drop-container-${strat.id}">${dropsHtml}</div>
-                                <button class="btn-add" onclick="addStratDropRow('${strat.id}')">+ 떨법 물량 추가</button>
-                            </div>
-                        </div>
-
-                        <div class="action-row">
-                            <button class="btn-generate" onclick="generateStratTable('${strat.id}')">⚡ 오늘자 주문 생성</button>
-                            <button class="btn-nextday" onclick="processStratNextDay('${strat.id}')">⏭️ 결산 및 다음 날 넘어가기</button>
-                        </div>
+        <!-- [탭 0] 자동 주문 생성기 화면 -->
+        <div id="tabContent0" class="tab-content active-content">
+            <div class="settings-panel">
+                <div class="top-row" style="grid-template-columns: repeat(7, 1fr);">
+                    <div class="input-group">
+                        <label>📅 현재 거래일</label>
+                        <input type="date" id="currentDate" onchange="onDateChange()">
                     </div>
-
-                    <div class="result-section">
-                        <div class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</div>
-                        <div id="buy-preview-${strat.id}">
-                            <div class="empty-message">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
-                        </div>
+                    <div class="input-group">
+                        <label>💰 기준 운용금액($)</label>
+                        <input type="number" id="baseBudget" value="24000" oninput="autoSaveState()">
                     </div>
-
-                    <div class="result-section">
-                        <div class="result-title-sell">생성된 매도 주문 (LOC) 미리보기</div>
-                        <div id="sell-preview-${strat.id}">
-                            <div class="empty-message">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
-                        </div>
+                    <div class="input-group">
+                        <label style="color:#1d4ed8;">💵 현재 총 자산($)</label>
+                        <input type="text" id="totalAssetSum" readonly style="background:#dbeafe; font-weight:bold; color:#1e40af;">
                     </div>
-
-                    <!-- 장부 테이블 -->
-                    <div class="result-section" style="background-color: #f8fafc;">
-                        <div style="font-weight: bold; color: #1e3a8a; font-size: 16px; margin-bottom: 12px; border-left: 4px solid #1e3a8a; padding-left: 10px;">
-                            📈 ${strat.name} 일별 거래 장부 및 히스토리
-                        </div>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>거래일</th>
-                                    <th>마감 종가($)</th>
-                                    <th>업다운 회차</th>
-                                    <th>업다운 수량</th>
-                                    <th>떨법 보유 현황</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ledger-tbody-${strat.id}">
-                                <tr><td colspan="5" style="color: #94a3b8; padding: 20px;">저장된 장부가 없습니다.</td></tr>
-                            </tbody>
-                        </table>
+                    <div class="input-group">
+                        <label style="color:#b45309;">➕➖ 당일 입출금($)</label>
+                        <input type="number" id="dailyIo" value="0" oninput="autoSaveState()" style="color:#b45309; font-weight:bold;" placeholder="+3000 / -3000">
+                    </div>
+                    <div class="input-group">
+                        <label>🔢 총 회차 선택</label>
+                        <input type="number" id="totalStepsSetting" value="16" oninput="autoSaveState()">
+                    </div>
+                    <div class="input-group">
+                        <label>🔒 1기법당 매수금($)</label>
+                        <input type="number" id="buyAmount" value="1500" oninput="autoSaveState()" style="background:#fffbeb; font-weight:bold; color:#b45309;">
+                    </div>
+                    <div class="input-group">
+                        <label>📉 하락간격(%)</label>
+                        <input type="number" id="dropRate" step="0.01" value="0.25" oninput="autoSaveState()">
                     </div>
                 </div>
-            `;
-            calculateStratBudget(strat.id);
-        });
 
-        // 2. 결과보기 (퉁치기) 탭
-        const resIdx = window.strategies.length;
-        const balIdx = window.strategies.length + 1;
-        const setIdx = window.strategies.length + 2;
-
-        tabBtns.innerHTML += `<button class="tab-btn" onclick="switchTab(${resIdx})" style="color:#ef4444;">📊 결과보기 (퉁치기)</button>`;
-        tabContents.innerHTML += `
-            <div class="tab-content" id="content-${resIdx}">
-                <h2 style="font-size:16px; margin-bottom:15px; text-align:center; color:#1e3a8a;">✨ 모든 기법 동일 날짜 기준 통합 퉁치기</h2>
-                <div class="settings-panel" style="display:flex; justify-content: center; gap: 15px; align-items:center; margin-bottom: 15px;">
-                    <label>조회할 날짜 선택:</label>
-                    <input type="date" id="target-calc-date" onchange="calculateTotalNet()" style="width:150px; padding:6px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
-                </div>
-                <button class="btn-generate" onclick="calculateTotalNet()" style="margin-bottom: 15px;">선택 날짜 기준 퉁치기 실행</button>
-                <div class="result-box" id="final-result-box" style="display:none; border:1px solid #e2e8f0; padding:20px; border-radius:8px; background:#f8fafc;">
-                    <div class="dual-tables-container">
-                        <div class="order-column"><div class="column-title" style="color:#3b82f6;">🔵 매도 순주문</div><div id="sell-result-list"></div></div>
-                        <div class="order-column"><div class="column-title" style="color:#ef4444;">🔴 매수 순주문</div><div id="buy-result-list"></div></div>
+                <!-- 3단 가로 배치 -->
+                <div class="triple-row">
+                    <!-- 1단: 실시간 자산 요약 대시보드 -->
+                    <div class="card-box" style="background: #f8fafc; border: 1px solid #cbd5e1;">
+                        <div class="card-title"><span style="color:#1d4ed8">■ 실시간 자산 대시보드</span></div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div class="input-group">
+                                <label style="color:#1d4ed8;">💵 잔여 달러($)</label>
+                                <input type="text" id="remainingCash" readonly style="background:#dbeafe; font-weight:bold; color:#1e40af;">
+                            </div>
+                            <div class="input-group">
+                                <label style="color:#1d4ed8;">📊 잔여 회차</label>
+                                <input type="text" id="remainingSteps" readonly style="background:#dbeafe; font-weight:bold; color:#1e40af;">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+                            <div class="input-group">
+                                <label style="color:#1d4ed8;">📦 총 보유개수</label>
+                                <input type="text" id="totalHoldingCount" readonly style="background:#dbeafe; font-weight:bold; color:#1e40af;">
+                            </div>
+                            <div class="input-group">
+                                <label style="color:#1d4ed8;">🎯 평균 단가($)</label>
+                                <input type="text" id="averagePrice" readonly style="background:#dbeafe; font-weight:bold; color:#1e40af;">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
+                            <div class="input-group">
+                                <label style="color:#1d4ed8;">📈 평가 손익($)</label>
+                                <input type="text" id="totalProfitLoss" readonly style="background:#dbeafe; font-weight:bold;">
+                            </div>
+                            <div class="input-group">
+                                <label style="color:#1d4ed8;">🚀 총 수익률(%)</label>
+                                <input type="text" id="totalReturnRate" readonly style="background:#dbeafe; font-weight:bold;">
+                            </div>
+                        </div>
                     </div>
-                    <div id="cash-needed-display"></div>
+
+                    <!-- 2단: 업다운 상태 입력 -->
+                    <div class="card-box">
+                        <div class="card-title"><span style="color:#ea580c">■ 업다운 상태 입력</span></div>
+                        <div class="input-group">
+                            <label>당일 기준 가격 (오늘 종가)</label>
+                            <input type="number" id="basePrice" step="0.01" value="100.00" oninput="autoSaveState()" style="font-weight:bold; color:#1e3a8a; background:#eff6ff;">
+                        </div>
+                        <div class="input-group">
+                            <label style="color:#b45309;">📌 업다운 기준가격 (직전 체결가 고정)</label>
+                            <input type="number" id="anchorPrice" step="0.01" value="100.00" oninput="autoSaveState()" style="font-weight:bold; color:#b45309; background:#fffbeb;">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div class="input-group">
+                                <label>현재 회차</label>
+                                <input type="number" id="currentStep" value="0" oninput="autoSaveState()">
+                            </div>
+                            <div class="input-group">
+                                <label>누적 보유수량</label>
+                                <input type="number" id="totalQty" value="0" oninput="autoSaveState()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3단: 현재 보유 중인 떨법 물량 -->
+                    <div class="card-box">
+                        <div class="card-title">
+                            <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
+                        </div>
+                        <div id="dropHoldingsContainer" style="max-height: 220px; overflow-y: auto;">
+                            <!-- 동적 생성 -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-row">
+                    <button class="btn-generate" onclick="generateTable()">⚡ 오늘자 주문 생성</button>
+                    <button class="btn-nextday" onclick="processSettlement()">📝 당일 장 마감 결산 반영 (클라우드 동기화)</button>
                 </div>
             </div>
-        `;
 
-        // 3. 잔고 & 일별기록 탭
-        tabBtns.innerHTML += `<button class="tab-btn" onclick="switchTab(${balIdx})" style="color:#3b82f6;">📈 잔고&일별기록</button>`;
-        tabContents.innerHTML += `
-            <div class="tab-content" id="content-${balIdx}">
-                <div class="settings-panel" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 15px;">
-                    <div><label>📅 기록 날짜</label><input type="date" id="record-date" onchange="updateBalanceLive()" style="width:130px; margin-left:5px; padding:6px; text-align:center; border:1px solid #cbd5e1; border-radius:4px;"></div>
-                    <div style="display:flex; gap:15px; align-items:center;">
-                        <div><label>💵 당일 종가($)</label><input type="number" step="0.01" id="record-close-price" value="77.00" oninput="updateBalanceLive()" style="width:80px; margin-left:5px; padding:6px; text-align:center; border:1px solid #cbd5e1; border-radius:4px;"></div>
-                        <div><label>💱 환율(원/달러)</label><input type="number" step="0.01" id="record-exchange-rate" value="1350.00" oninput="updateBalanceLive()" style="width:90px; margin-left:5px; padding:6px; text-align:center; border:1px solid #cbd5e1; border-radius:4px;"></div>
+            <!-- 매수/매도 좌우 2단 배치 섹션 -->
+            <div class="orders-container">
+                <div class="result-section">
+                    <div class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</div>
+                    <div id="buyResultArea">
+                        <div class="empty-message">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
                     </div>
                 </div>
-                <table class="balance-table">
+                <div class="result-section">
+                    <div class="result-title-sell">생성된 매도 주문 (LOC) 미리보기</div>
+                    <div id="sellResultArea">
+                        <div class="empty-message">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- [탭 1] 잔고&일별기록 화면 -->
+        <div id="tabContent1" class="tab-content">
+            <div class="result-section" style="background-color: #f8fafc; margin-top: 0;">
+                <div style="font-weight: bold; color: #1e3a8a; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #1e3a8a; padding-left: 8px;">
+                    📈 일별 거래 장부 및 입출금 히스토리 (클라우드 저장됨)
+                </div>
+                <table>
                     <thead>
                         <tr>
-                            <th style="width: 12%;">기법명</th><th style="width: 11%;">보유수량</th><th style="width: 12%;">평균가($)</th><th style="width: 15%;">잔여달러($)</th>
-                            <th style="width: 15%;">평가총합($)</th><th style="width: 13%;">평가손익($)</th><th style="width: 10%;">수익률</th><th style="width: 12%;">초기자금($)</th>
+                            <th>거래일</th>
+                            <th>운용금($)</th>
+                            <th>입출금($)</th>
+                            <th>실현손익($)</th>
+                            <th>총 자산($)</th>
+                            <th>종가($)</th>
+                            <th>회차</th>
+                            <th>수량</th>
+                            <th>떨법 현황</th>
+                            <th>관리</th>
                         </tr>
                     </thead>
-                    <tbody id="balance-tbody"></tbody>
-                    <tfoot id="balance-tfoot"></tfoot>
+                    <tbody id="ledgerTableBody">
+                        <tr><td colspan="10" style="color: #94a3b8; padding: 15px;">아직 저장된 장부가 없습니다.</td></tr>
+                    </tbody>
                 </table>
-                <div id="krw-summary-display"></div>
-                <div style="margin-top:15px;">
-                    <button class="btn-generate" onclick="saveDailyRecord()" style="width:100%; margin-top:0;">💾 일별 잔고 클라우드 기록 저장</button>
-                </div>
-                <hr style="margin: 25px 0; border:0; border-top:1px solid #e2e8f0;">
-                <h3 style="font-size:15px; color:#1e3a8a; margin-bottom:10px;">📜 일별 누적 히스토리</h3>
-                <div id="history-container"></div>
             </div>
-        `;
+        </div>
 
-        // 4. 기법 관리 탭
-        tabBtns.innerHTML += `<button class="tab-btn" onclick="switchTab(${setIdx})" style="color:#d97706;">⚙️ 기법 관리</button>`;
-        tabContents.innerHTML += `
-            <div class="tab-content" id="content-${setIdx}">
-                <h2 style="font-size:16px; margin-bottom:15px; text-align:center; color:#1e3a8a;">⚙️ 기법 관리 (JAN, FEB, MAR...)</h2>
-                <div id="strategy-manage-list"></div>
-                <div style="display:flex; gap:10px; margin-top:15px;">
-                    <input type="text" id="new-strat-name" placeholder="추가할 새 기법 이름 입력 (예: FEB, MAR)" style="flex:1; padding:10px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px;">
-                    <button class="btn-generate" onclick="addNewStrategy()" style="width:150px; margin-top:0;">+ 기법 추가</button>
+        <!-- [탭 2] 기법 설명 화면 -->
+        <div id="tabContent2" class="tab-content">
+            <div class="result-section" style="background-color: #f8fafc; margin-top: 0;">
+                <div style="font-weight: bold; color: #1e3a8a; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #1e3a8a; padding-left: 8px;">
+                    ⚙️ 알고리즘 스위치 매매 기법 안내
                 </div>
-                <button class="btn-generate" onclick="resetAllData()" style="background-color:#ef4444; margin-top:30px; width:100%;">전체 초기화</button>
+                <div style="line-height: 1.6; color: #475569; font-size: 13px; background: white; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <p><b>1. 클라우드 실시간 동기화:</b> 이제 보안 로그인을 통해 값을 변경할 때마다 실시간으로 클라우드에 장부와 대시보드가 저장됩니다. 스마트폰이나 PC 어디서든 접속 시 동일한 데이터를 유지합니다.</p>
+                    <p><b>2. 누적 실현손익 연동:</b> 매도 체결 시 발생하는 차익(실현손익)이 총자산 및 현금 잔고에 누적되어 완벽하게 일치하도록 개선되었습니다.</p>
+                    <p><b>3. 장 마감 결산:</b> '당일 장 마감 결산 반영' 버튼을 누르면 다음 날짜로 이월되며 장부에 영구 기록됩니다.</p>
+                </div>
             </div>
-        `;
+        </div>
+    </div>
 
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-        if(document.getElementById('target-calc-date')) document.getElementById('target-calc-date').value = todayStr;
-        if(document.getElementById('record-date')) document.getElementById('record-date').value = todayStr;
+    <!-- 스크립트 로직 (인스5 알고리즘) -->
+    <script>
+        window.dailyDatabase = {};
+        window.globalPendingBuys = [];
+        window.globalPendingSells = [];
 
-        window.strategies.forEach(strat => {
-            generateStratTable(strat.id, true);
-        });
-
-        renderStrategyManageList();
-        renderBalanceTable();
-        renderHistoryList();
-    };
-
-    window.switchTab = function(index) {
-        document.querySelectorAll('.tab-btn').forEach((btn, idx) => btn.classList.toggle('active', idx === index));
-        document.querySelectorAll('.tab-content').forEach((content, idx) => content.classList.toggle('active', idx === index));
-        let balIdx = window.strategies.length + 1;
-        let resIdx = window.strategies.length;
-        if (index === balIdx) renderBalanceTable();
-        if (index === resIdx) calculateTotalNet();
-    };
-
-    // 1기법당 매수금 자동 계산 함수 연결
-    window.calculateStratBudget = function(stratId) {
-        const total = parseFloat(document.getElementById(`budget-${stratId}`).value) || 0;
-        const steps = parseInt(document.getElementById(`steps-${stratId}`).value) || 16;
-        const buyAmtInput = document.getElementById(`buyamt-${stratId}`);
-        if(buyAmtInput) {
-            buyAmtInput.value = (steps > 0 ? (total / steps) : 0).toFixed(2);
+        function getTodayStr() {
+            let d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
-    };
 
-    window.addStratDropRow = function(stratId, p = '', q = '') {
-        const container = document.getElementById(`drop-container-${stratId}`);
-        const row = document.createElement('div');
-        row.className = `drop-row drop-row-${stratId}`;
-        row.innerHTML = `
-            <input type="number" step="0.01" class="drop-price" placeholder="매수가($)" value="${p}" oninput="syncAlgoState('${stratId}')">
-            <input type="number" class="drop-qty" placeholder="수량" value="${q}" oninput="syncAlgoState('${stratId}')">
-            <button class="btn-small" onclick="this.parentElement.remove(); syncAlgoState('${stratId}');">X</button>
-        `;
-        container.appendChild(row);
-        syncAlgoState(stratId);
-    };
+        window.switchTab = function(index) {
+            const tabs = document.querySelectorAll('.tabs div');
+            tabs.forEach((t, i) => {
+                if (i === index) t.classList.add('active');
+                else t.classList.remove('active');
+            });
 
-    window.syncAlgoState = function(stratId) {
-        calculateStratBudget(stratId); // 입력 바뀔 때마다 매수금 자동 재계산
-        let strat = window.strategies.find(s => s.id === stratId);
-        if(!strat) return;
-
-        let drops = [];
-        document.querySelectorAll(`.drop-row-${stratId}`).forEach(row => {
-            let p = parseFloat(row.querySelector('.drop-price').value);
-            let q = parseInt(row.querySelector('.drop-qty').value);
-            if(!isNaN(p) && !isNaN(q) && q > 0) drops.push({price: p, qty: q});
-        });
-
-        strat.algo = {
-            currentDate: document.getElementById(`date-${stratId}`).value,
-            totalBudget: parseFloat(document.getElementById(`budget-${stratId}`).value) || 0,
-            totalStepsSetting: parseInt(document.getElementById(`steps-${stratId}`).value) || 16,
-            dropRate: parseFloat(document.getElementById(`drop-${stratId}`).value) || 0.25,
-            basePrice: parseFloat(document.getElementById(`base-${stratId}`).value) || 0,
-            currentStep: parseInt(document.getElementById(`round-${stratId}`).value) || 0,
-            totalQty: parseInt(document.getElementById(`tqty-${stratId}`).value) || 0,
-            drops: drops
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach((c, i) => {
+                if (i === index) c.classList.add('active-content');
+                else c.classList.remove('active-content');
+            });
         };
-        saveData();
-    };
 
-    window.onStratDateChange = function(stratId) {
-        let strat = window.strategies.find(s => s.id === stratId);
-        let dateStr = document.getElementById(`date-${stratId}`).value;
-        
-        if(window.allData[dateStr] && window.allData[dateStr][stratId] && window.allData[dateStr][stratId].algoState) {
-            let algo = window.allData[dateStr][stratId].algoState;
-            strat.algo = algo;
-            document.getElementById(`budget-${stratId}`).value = algo.totalBudget;
-            document.getElementById(`steps-${stratId}`).value = algo.totalStepsSetting;
-            document.getElementById(`drop-${stratId}`).value = algo.dropRate;
-            document.getElementById(`base-${stratId}`).value = algo.basePrice;
-            document.getElementById(`round-${stratId}`).value = algo.currentStep;
-            document.getElementById(`tqty-${stratId}`).value = algo.totalQty;
-            calculateStratBudget(stratId);
+        function getEffectiveTotalBudget() {
+            let baseBudget = parseFloat(document.getElementById('baseBudget').value) || 0;
+            let ioAmount = parseFloat(document.getElementById('dailyIo').value) || 0;
+            return baseBudget + ioAmount;
+        }
 
-            let container = document.getElementById(`drop-container-${stratId}`);
+        function getDropsFromScreen() {
+            let drops = [];
+            document.querySelectorAll('.drop-row-item').forEach(row => {
+                let p = parseFloat(row.querySelector('.drop-price').value);
+                let q = parseInt(row.querySelector('.drop-qty').value);
+                let d = row.querySelector('.drop-date').value;
+                if (!isNaN(p) && !isNaN(q) && q > 0) {
+                    drops.push({price: p, qty: q, date: d});
+                }
+            });
+            return drops;
+        }
+
+        function updateSummaryDashboard() {
+            const dateStr = document.getElementById('currentDate').value;
+            let currentData = window.dailyDatabase[dateStr] || {};
+            let realizedProfit = currentData.realizedProfit || 0;
+
+            const totalBudget = getEffectiveTotalBudget() + realizedProfit;
+            const buyAmountPerStep = parseFloat(document.getElementById('buyAmount').value) || 1500;
+            const updownQty = parseInt(document.getElementById('totalQty').value) || 0;
+            const currentPrice = parseFloat(document.getElementById('basePrice').value) || 0;
+            const anchorPrice = parseFloat(document.getElementById('anchorPrice').value) || currentPrice;
+
+            let dropCostSum = 0;
+            let dropHoldingSumQty = 0;
+            let drops = getDropsFromScreen();
+            drops.forEach(d => {
+                dropCostSum += (d.price * d.qty);
+                dropHoldingSumQty += d.qty;
+            });
+
+            let updownCostSum = updownQty * anchorPrice;
+            let totalCost = dropCostSum + updownCostSum;
+            if (totalCost > totalBudget) totalCost = totalBudget;
+
+            let remainingCash = totalBudget - totalCost;
+            if (remainingCash < 0) remainingCash = 0;
+
+            let remainingSteps = buyAmountPerStep > 0 ? (remainingCash / buyAmountPerStep) : 0;
+            let totalHoldingCount = updownQty + dropHoldingSumQty;
+
+            let avgPrice = totalHoldingCount > 0 ? (totalCost / totalHoldingCount) : 0;
+            let totalEvalValue = totalHoldingCount * currentPrice;
+            
+            let evalProfit = totalHoldingCount > 0 ? (totalEvalValue - totalCost) : 0;
+            if (Math.abs(evalProfit) < 0.5) evalProfit = 0;
+
+            let totalAsset = remainingCash + totalEvalValue;
+
+            let initialBaseBudget = parseFloat(document.getElementById('baseBudget').value) || 0;
+            let totalProfitSum = totalAsset - initialBaseBudget;
+            let totalReturn = initialBaseBudget > 0 ? (totalProfitSum / initialBaseBudget) * 100 : 0;
+            if (Math.abs(totalReturn) < 0.01) totalReturn = 0;
+
+            document.getElementById('totalAssetSum').value = totalAsset.toFixed(2) + " $";
+            document.getElementById('remainingCash').value = remainingCash.toFixed(2) + " $";
+            document.getElementById('remainingSteps').value = remainingSteps.toFixed(1) + " 회차";
+            document.getElementById('totalHoldingCount').value = totalHoldingCount + " 주";
+            document.getElementById('averagePrice').value = totalHoldingCount > 0 ? (avgPrice.toFixed(2) + " $") : "-";
+
+            let profitEl = document.getElementById('totalProfitLoss');
+            profitEl.value = (totalProfitSum > 0 ? "+" : "") + totalProfitSum.toFixed(2) + " $";
+            profitEl.style.color = totalProfitSum > 0 ? "#ef4444" : (totalProfitSum < 0 ? "#3b82f6" : "#334155");
+
+            let returnEl = document.getElementById('totalReturnRate');
+            returnEl.value = (totalReturn > 0 ? "+" : "") + totalReturn.toFixed(2) + " %";
+            returnEl.style.color = totalReturn > 0 ? "#ef4444" : (totalReturn < 0 ? "#3b82f6" : "#334155");
+
+            return { remainingCash, remainingSteps, totalAsset, realizedProfit };
+        }
+
+        function renderDropRows(dropsData) {
+            const container = document.getElementById('dropHoldingsContainer');
             container.innerHTML = '';
-            (algo.drops || []).forEach(d => addStratDropRow(stratId, d.price, d.qty));
-        }
-        generateStratTable(stratId);
-    };
-
-    window.generateStratTable = function(stratId, isInit = false) {
-        syncAlgoState(stratId);
-
-        const basePrice = parseFloat(document.getElementById(`base-${stratId}`).value);
-        const dropRate = parseFloat(document.getElementById(`drop-${stratId}`).value);
-        const buyAmount = parseFloat(document.getElementById(`buyamt-${stratId}`).value);
-        const currentStep = parseInt(document.getElementById(`round-${stratId}`).value);
-        const totalQty = parseInt(document.getElementById(`tqty-${stratId}`).value);
-
-        if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount)) {
-            if(!isInit) alert('필수 값을 모두 정확히 입력해주세요.');
-            return;
-        }
-
-        let pendingBuys = [];
-        let pendingSells = [];
-        let limitPrice = basePrice * 0.80; 
-        let merged = new Map();
-
-        function addOrder(type, label, p, q) {
-            pendingBuys.push({ category: type === 'A' ? 'drop' : 'updown', label, price: parseFloat(p.toFixed(2)), qty: q });
-            let key = p.toFixed(2);
-            if (!merged.has(key)) merged.set(key, { price: parseFloat(key), qtyA: 0, qtyB: 0, labelA: '', labelB: '' });
-            let entry = merged.get(key);
-            if (type === 'A') { entry.qtyA += q; entry.labelA = label; }
-            else { entry.qtyB += q; entry.labelB = label; }
-        }
-
-        let pA = basePrice - 0.01;
-        let qA = Math.floor(buyAmount / pA);
-        if (pA >= limitPrice) {
-            addOrder('A', '떨법 기본진입', pA, qA);
-            let nA = qA + 1;
-            while (true) {
-                let p = buyAmount / nA;
-                if (p < limitPrice || nA > 10000) break;
-                if (p < pA) addOrder('A', '떨법 추가방어', p, 1);
-                nA++;
+            
+            if (!dropsData || dropsData.length === 0) {
+                container.innerHTML = `<div style="color: #94a3b8; font-size: 11px; text-align: center; padding: 20px;">보유 중인 떨법 물량이 없습니다.</div>`;
+                return;
             }
-        }
 
-        let pB = (currentStep === 0) ? (basePrice * 1.10) : (basePrice * (1 - (dropRate * currentStep) / 100));
-        let qB = Math.floor(buyAmount / pB);
-        if (pB >= limitPrice) {
-            let labelB = (currentStep === 0) ? `업다운 확정진입(0->1회차)` : `업다운 기본진입(${currentStep}->${currentStep+1}회차)`;
-            addOrder('B', labelB, pB, qB);
-            let nB = qB + 1;
-            while (true) {
-                let p = buyAmount / nB;
-                if (p < limitPrice || nB > 10000) break;
-                if (p < pB) addOrder('B', '업다운 추가방어', p, 1);
-                nB++;
-            }
-        }
-
-        let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-        let buyHtml = `<div class="info-box">💡 <b>테이블 간소화:</b> 동일한 매수 가격은 병합됩니다.</div>`;
-
-        let formattedBuys = [];
-        if (finalOrders.length > 0) {
-            buyHtml += `<table><tr><th>구분 (라벨)</th><th>LOC 매수 단가($)</th><th>주문 수량</th></tr>`;
-            finalOrders.forEach(order => {
-                let finalLabel = '', finalClass = '', totalQ = order.qtyA + order.qtyB;
-                if (order.qtyA > 0 && order.qtyB > 0) { finalLabel = `합동 방어 (떨법 ${order.qtyA} + 업다운 ${order.qtyB})`; finalClass = 'label-joint'; }
-                else if (order.qtyA > 0) { finalLabel = order.labelA; finalClass = 'label-drop'; }
-                else { finalLabel = order.labelB; finalClass = 'label-updown'; }
-
-                buyHtml += `<tr><td class="${finalClass}">${finalLabel}</td><td class="price-col">${order.price.toFixed(2)}</td><td class="qty-col">${totalQ}</td></tr>`;
-                formattedBuys.push({ price: order.price, qty: totalQ, label: finalLabel });
+            dropsData.forEach((d, idx) => {
+                const row = document.createElement('div');
+                row.className = 'drop-row-item';
+                row.innerHTML = `
+                    <span style="font-weight:bold; color:#64748b;">떨법${idx + 1}</span>
+                    <input type="number" step="0.01" class="drop-price" placeholder="매수가" value="${d.price}" oninput="autoSaveState();">
+                    <input type="number" class="drop-qty" placeholder="수량" value="${d.qty}" oninput="autoSaveState();">
+                    <input type="date" class="drop-date" value="${d.date}" onchange="autoSaveState();">
+                `;
+                container.appendChild(row);
             });
-            buyHtml += `</table>`;
-        } else {
-            buyHtml += `<div class="empty-message">매수 주문 없음</div>`;
         }
-        document.getElementById(`buy-preview-${stratId}`).innerHTML = buyHtml;
 
-        let sellHtml = '';
-        let formattedSells = [];
+        window.autoSaveState = function() {
+            const dateStr = document.getElementById('currentDate').value;
+            if (!dateStr) return;
 
-        if (currentStep > 0) {
-            let sellQty = Math.floor(totalQty / currentStep);
-            if (sellQty > 0) {
-                pendingSells.push({ category: 'updown', type: `업다운 (${currentStep - 1}회차 복귀용)`, rate: '당일 종가 (0.00%)', price: parseFloat(basePrice.toFixed(2)), qty: sellQty, class: 'label-updown' });
-                formattedSells.push({ price: basePrice, qty: sellQty, label: `업다운 (${currentStep - 1}회차 복귀용)` });
+            let drops = getDropsFromScreen();
+            let existingRealized = window.dailyDatabase[dateStr] ? (window.dailyDatabase[dateStr].realizedProfit || 0) : 0;
+
+            window.dailyDatabase[dateStr] = {
+                baseBudget: parseFloat(document.getElementById('baseBudget').value) || 0,
+                io: parseFloat(document.getElementById('dailyIo').value) || 0,
+                realizedProfit: existingRealized,
+                totalSteps: parseInt(document.getElementById('totalStepsSetting').value) || 16,
+                buyAmount: parseFloat(document.getElementById('buyAmount').value) || 1500,
+                dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
+                basePrice: parseFloat(document.getElementById('basePrice').value) || 0,
+                anchorPrice: parseFloat(document.getElementById('anchorPrice').value) || 0,
+                currentStep: parseInt(document.getElementById('currentStep').value) || 0,
+                totalQty: parseInt(document.getElementById('totalQty').value) || 0,
+                drops: drops
+            };
+            
+            updateSummaryDashboard();
+            updateLedgerTable();
+
+            // 파이어베이스에 동기화 (작성 중인 데이터 실시간 반영)
+            if(window.saveCloudDataInstant) {
+                window.saveCloudDataInstant();
             }
-        }
-
-        let dropCount = 1;
-        document.querySelectorAll(`.drop-row-${stratId}`).forEach(row => {
-            let p = parseFloat(row.querySelector('.drop-price').value);
-            let q = parseInt(row.querySelector('.drop-qty').value);
-            if (!isNaN(p) && !isNaN(q) && q > 0) {
-                pendingSells.push({ category: 'drop', type: `떨법 보유물량 ${dropCount}`, rate: '지정가 (본절)', price: parseFloat(p.toFixed(2)), qty: q, class: 'label-drop' });
-                formattedSells.push({ price: p, qty: q, label: `떨법 보유물량 ${dropCount}` });
-                dropCount++;
-            }
-        });
-
-        if (pendingSells.length > 0) {
-            sellHtml += `<table><tr><th>구분</th><th>적용 비율</th><th>단가($)</th><th>주문 수량</th></tr>`;
-            pendingSells.forEach(order => {
-                sellHtml += `<tr><td class="${order.class}">${order.type}</td><td style="font-weight:bold;">${order.rate}</td><td style="color: #3b82f6; font-weight:bold;">${order.price.toFixed(2)}</td><td class="qty-col">${order.qty}</td></tr>`;
-            });
-            sellHtml += `</table>`;
-        } else {
-            sellHtml = '<div class="empty-message">매도할 보유 물량이 없습니다.</div>';
-        }
-        document.getElementById(`sell-preview-${stratId}`).innerHTML = sellHtml;
-
-        let dateVal = document.getElementById(`date-${stratId}`).value;
-        let strat = window.strategies.find(s => s.id === stratId);
-        if(!window.allData[dateVal]) window.allData[dateVal] = {};
-        window.allData[dateVal][stratId] = {
-            mult: strat.defaultMult || 1,
-            buys: formattedBuys,
-            sells: formattedSells,
-            algoState: JSON.parse(JSON.stringify(strat.algo))
         };
-        saveData();
-        updateLedgerTable(stratId);
-    };
 
-    window.processStratNextDay = function(stratId) {
-        generateStratTable(stratId);
-        let dateStr = document.getElementById(`date-${stratId}`).value;
-        let closeStr = prompt(`[ ${dateStr} ] 마감 종가를 입력하세요:`);
-        if (closeStr === null || closeStr.trim() === '') return;
-        const closePrice = parseFloat(closeStr);
-        if (isNaN(closePrice) || closePrice <= 0) { alert("올바른 종가를 입력해주세요."); return; }
+        window.onDateChange = function() {
+            const dateStr = document.getElementById('currentDate').value;
+            if (!dateStr) return;
 
-        let strat = window.strategies.find(s => s.id === stratId);
-        let dateObj = new Date(dateStr);
-        dateObj.setDate(dateObj.getDate() + 1);
-        let nextDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+            if (window.dailyDatabase[dateStr]) {
+                applyDataToScreen(window.dailyDatabase[dateStr]);
+            } else {
+                let sortedDates = Object.keys(window.dailyDatabase).sort();
+                let pastDates = sortedDates.filter(d => d < dateStr);
+                
+                if (pastDates.length > 0) {
+                    let lastDate = pastDates[pastDates.length - 1];
+                    let lastData = window.dailyDatabase[lastDate];
+                    
+                    let carriedRealized = lastData.realizedProfit || 0;
+                    let carriedBudget = (lastData.baseBudget || 0) + (lastData.io || 0) + carriedRealized;
 
-        strat.algo.currentDate = nextDateStr;
-        strat.algo.basePrice = closePrice;
-        document.getElementById(`date-${stratId}`).value = nextDateStr;
-        document.getElementById(`base-${stratId}`).value = closePrice;
-
-        generateStratTable(stratId);
-        alert(`[ ${dateStr} ] 결산 완료! 다음 날 [ ${nextDateStr} ] 장부가 자동 세팅되었습니다.`);
-    };
-
-    window.updateLedgerTable = function(stratId) {
-        let tbody = document.getElementById(`ledger-tbody-${stratId}`);
-        if(!tbody) return;
-        tbody.innerHTML = '';
-
-        let historyRows = [];
-        for(let dStr in window.allData) {
-            if(window.allData[dStr][stratId] && window.allData[dStr][stratId].algoState) {
-                historyRows.push({ date: dStr, algo: window.allData[dStr][stratId].algoState });
+                    let inheritedData = {
+                        baseBudget: carriedBudget,
+                        io: 0,
+                        realizedProfit: 0,
+                        totalSteps: lastData.totalSteps,
+                        buyAmount: lastData.buyAmount,
+                        dropRate: lastData.dropRate,
+                        basePrice: lastData.basePrice,
+                        anchorPrice: lastData.anchorPrice,
+                        currentStep: lastData.currentStep,
+                        totalQty: lastData.totalQty,
+                        drops: JSON.parse(JSON.stringify(lastData.drops || []))
+                    };
+                    window.dailyDatabase[dateStr] = inheritedData;
+                    applyDataToScreen(inheritedData);
+                } else if (sortedDates.length > 0) {
+                    let firstData = window.dailyDatabase[sortedDates[0]];
+                    applyDataToScreen(firstData);
+                } else {
+                    autoSaveState();
+                }
             }
+            updateLedgerTable();
+            generateTable();
+            updateSummaryDashboard();
+        };
+
+        function applyDataToScreen(data) {
+            document.getElementById('baseBudget').value = data.baseBudget !== undefined ? data.baseBudget : 24000;
+            document.getElementById('dailyIo').value = data.io !== undefined ? data.io : 0;
+            document.getElementById('totalStepsSetting').value = data.totalSteps;
+            document.getElementById('buyAmount').value = data.buyAmount !== undefined ? data.buyAmount : 1500;
+            document.getElementById('dropRate').value = data.dropRate;
+            document.getElementById('basePrice').value = data.basePrice;
+            document.getElementById('anchorPrice').value = data.anchorPrice !== undefined ? data.anchorPrice : data.basePrice;
+            document.getElementById('currentStep').value = data.currentStep;
+            document.getElementById('totalQty').value = data.totalQty;
+            
+            renderDropRows(data.drops || []);
         }
-        historyRows.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        if(historyRows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" style="color: #94a3b8; padding: 20px;">저장된 장부가 없습니다.</td></tr>`;
-            return;
-        }
+        window.processSettlement = async function() {
+            if (window.globalPendingBuys.length === 0 && window.globalPendingSells.length === 0) {
+                alert("먼저 [오늘자 주문 생성]을 눌러 주문을 세팅해야 합니다.");
+                return;
+            }
 
-        historyRows.forEach(item => {
-            let dropStr = (item.algo.drops || []).map(d => `$${d.price.toFixed(2)}(${d.qty}주)`).join(', ') || '보유 없음';
-            tbody.innerHTML += `
-                <tr>
-                    <td><b>${item.date}</b></td>
-                    <td style="color:#ef4444; font-weight:bold;">$${item.algo.basePrice.toFixed(2)}</td>
-                    <td>${item.algo.currentStep}회차</td>
-                    <td style="color:#f59e0b; font-weight:bold;">${item.algo.totalQty}주</td>
-                    <td style="font-size:12px; color:#64748b;">${dropStr}</td>
-                </tr>`;
-        });
-    };
+            const currentDateStr = document.getElementById('currentDate').value;
+            const closeStr = prompt(`[ ${currentDateStr} ] 마감 종가를 입력하세요:`);
+            if (closeStr === null || closeStr.trim() === '') return;
+            
+            const closePrice = parseFloat(closeStr);
+            if (isNaN(closePrice) || closePrice <= 0) {
+                alert("올바른 종가를 입력해주세요.");
+                return;
+            }
 
-    window.calculateTotalNet = function() {
-        let targetDate = document.getElementById('target-calc-date').value;
-        let dayData = window.allData[targetDate] || {};
-        let rawBuys = [], rawSells = [], hasValidInput = false;
+            let oldStep = parseInt(document.getElementById('currentStep').value);
+            let totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
+            let buyAmountPerStep = parseFloat(document.getElementById('buyAmount').value) || 1500;
+            let oldAnchorPrice = parseFloat(document.getElementById('anchorPrice').value) || closePrice;
+            let oldQty = parseInt(document.getElementById('totalQty').value);
+            let currentIo = parseFloat(document.getElementById('dailyIo').value) || 0;
 
-        window.strategies.forEach(strat => {
-            let stratData = dayData[strat.id];
-            if(!stratData) return;
-            let mult = stratData.mult || 1;
+            let currentDropHoldings = [];
+            getDropsFromScreen().forEach(d => {
+                currentDropHoldings.push({price: d.price, qty: d.qty, date: d.date, matched: false});
+            });
 
-            if(stratData.buys) {
-                stratData.buys.forEach(b => {
-                    let price = parseFloat(b.price), qty = parseInt(b.qty);
-                    if(!isNaN(price) && !isNaN(qty) && qty > 0) {
-                        hasValidInput = true;
-                        qty = qty * mult;
-                        for(let i=0; i<qty; i++) rawBuys.push(price);
+            let newlyBoughtUpDownQty = 0;
+            let newlyBoughtDropQty = 0;
+            let soldUpDownQty = 0;
+            let soldDropQty = 0;
+            let realizedProfitAdd = 0;
+
+            let isUpDownBought = false;
+            let isUpDownSold = false;
+
+            window.globalPendingBuys.forEach(order => {
+                if (closePrice <= order.price) {
+                    if (order.category === 'updown') {
+                        newlyBoughtUpDownQty += order.qty;
+                        isUpDownBought = true;
+                    } else if (order.category === 'drop') {
+                        newlyBoughtDropQty += order.qty;
                     }
-                });
-            }
-            if(stratData.sells) {
-                stratData.sells.forEach(s => {
-                    let price = parseFloat(s.price), qty = parseInt(s.qty);
-                    if(!isNaN(qty) && qty > 0) {
-                        hasValidInput = true;
-                        qty = qty * mult;
-                        for(let i=0; i<qty; i++) {
-                            if (!isNaN(price)) rawSells.push(price);
+                }
+            });
+
+            window.globalPendingSells.forEach(order => {
+                if (closePrice >= order.price) {
+                    if (order.category === 'updown') {
+                        soldUpDownQty += order.qty;
+                        isUpDownSold = true;
+                        realizedProfitAdd += (closePrice - oldAnchorPrice) * order.qty;
+                    } else if (order.category === 'drop') {
+                        let idx = currentDropHoldings.findIndex(h => !h.matched && Math.abs(h.price - order.price) < 0.001 && h.qty === order.qty);
+                        if(idx !== -1) {
+                            currentDropHoldings[idx].matched = true;
+                            soldDropQty += order.qty;
+                            realizedProfitAdd += (closePrice - currentDropHoldings[idx].price) * order.qty;
                         }
                     }
-                });
+                }
+            });
+
+            let newStep = oldStep;
+            if (isUpDownBought) {
+                if (newStep < totalStepsLimit) newStep += 1;
             }
-        });
+            if (isUpDownSold) newStep -= 1;
+            if (newStep < 0) newStep = 0;
 
-        const resultBox = document.getElementById('final-result-box');
-        const sellList = document.getElementById('sell-result-list');
-        const buyList = document.getElementById('buy-result-list');
-        const cashDisplay = document.getElementById('cash-needed-display');
+            let newAnchorPrice = oldAnchorPrice;
+            if (isUpDownBought || isUpDownSold) newAnchorPrice = closePrice;
 
-        if (!hasValidInput) { resultBox.style.display = 'none'; return; }
+            let newQty = oldQty + newlyBoughtUpDownQty - soldUpDownQty;
+            if (newQty < 0) newQty = 0;
+            
+            if (newlyBoughtDropQty > 0) {
+                currentDropHoldings.push({price: closePrice, qty: newlyBoughtDropQty, date: currentDateStr, matched: false});
+            }
+            let finalDrops = currentDropHoldings.filter(h => !h.matched);
 
-        rawBuys.sort((a, b) => b - a);
-        rawSells.sort((a, b) => b - a);
-        let netOrders = { 'buy': {}, 'sell': {} };
-        function addNet(type, price, qty) {
-            netOrders[type][price.toFixed(2)] = (netOrders[type][price.toFixed(2)] || 0) + qty;
+            let absorptionMsg = "";
+            if (newStep === 0 && finalDrops.length > 0) {
+                let totalDropQty = finalDrops.reduce((sum, h) => sum + h.qty, 0);
+                let totalDropValue = totalDropQty * closePrice; 
+                let calculatedStep = Math.ceil(totalDropValue / buyAmountPerStep); 
+                if (calculatedStep > totalStepsLimit) calculatedStep = totalStepsLimit;
+
+                absorptionMsg = `\n\n🚨 [떨법 물량 업다운 흡수 기법 발동!]\n- 남은 떨법 수량(${totalDropQty}주)이 흡수되어 업다운 회차가 [ ${calculatedStep}회차 ]로 지정됩니다!`;
+                
+                newStep = calculatedStep; 
+                newAnchorPrice = closePrice;
+                newQty += totalDropQty;   
+                finalDrops = [];          
+            }
+
+            let baseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
+            let currentEffectiveBudget = baseBudgetVal + currentIo + realizedProfitAdd;
+
+            window.dailyDatabase[currentDateStr] = {
+                baseBudget: baseBudgetVal,
+                io: currentIo,
+                realizedProfit: realizedProfitAdd,
+                totalSteps: totalStepsLimit,
+                buyAmount: buyAmountPerStep,
+                dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
+                basePrice: closePrice,
+                anchorPrice: newAnchorPrice,
+                currentStep: newStep,
+                totalQty: newQty,
+                drops: finalDrops
+            };
+
+            let dateObj = new Date(currentDateStr);
+            dateObj.setDate(dateObj.getDate() + 1);
+            const yyyy = dateObj.getFullYear();
+            const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const dd = String(dateObj.getDate()).padStart(2, '0');
+            const nextDateStr = `${yyyy}-${mm}-${dd}`;
+
+            window.dailyDatabase[nextDateStr] = {
+                baseBudget: currentEffectiveBudget,
+                io: 0,
+                realizedProfit: 0,
+                totalSteps: totalStepsLimit,
+                buyAmount: buyAmountPerStep,
+                dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
+                basePrice: closePrice,
+                anchorPrice: newAnchorPrice,
+                currentStep: newStep,
+                totalQty: newQty,
+                drops: JSON.parse(JSON.stringify(finalDrops))
+            };
+
+            document.getElementById('currentDate').value = nextDateStr;
+            document.getElementById('baseBudget').value = currentEffectiveBudget;
+            document.getElementById('dailyIo').value = 0;
+            document.getElementById('basePrice').value = closePrice;
+            document.getElementById('anchorPrice').value = newAnchorPrice;
+            document.getElementById('currentStep').value = newStep;
+            document.getElementById('totalQty').value = newQty;
+
+            renderDropRows(finalDrops);
+
+            updateLedgerTable();
+            generateTable();
+            updateSummaryDashboard();
+            
+            // 즉시 클라우드에 강제 저장
+            if(window.saveCloudDataInstant) {
+                await window.saveCloudDataInstant();
+            }
+
+            alert(`[ ${currentDateStr} ] 결산 완료! (실현손익: $${realizedProfitAdd.toFixed(2)}, 종가: $${closePrice})${absorptionMsg}\n\n👉 [ ${nextDateStr} ](다음 날) 장부 데이터로 자산이 연동되었습니다.\n(클라우드에 안전하게 백업됨)`);
+        };
+
+        function updateLedgerTable() {
+            const tbody = document.getElementById('ledgerTableBody');
+            tbody.innerHTML = '';
+
+            let sortedDates = Object.keys(window.dailyDatabase).sort().reverse();
+
+            if (sortedDates.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="10" style="color: #94a3b8; padding: 15px;">아직 저장된 장부가 없습니다.</td></tr>`;
+                return;
+            }
+
+            sortedDates.forEach(date => {
+                let data = window.dailyDatabase[date];
+                let dropStr = (data.drops && data.drops.length > 0) ? data.drops.map(d => `$${d.price.toFixed(2)}(${d.qty}주)`).join(', ') : '보유 없음';
+
+                let ioVal = data.io || 0;
+                let ioStr = ioVal !== 0 ? (ioVal > 0 ? `<span style="color:#16a34a">+${ioVal}$</span>` : `<span style="color:#dc2626">${ioVal}$</span>`) : '-';
+                
+                let realizedVal = data.realizedProfit || 0;
+                let realizedStr = realizedVal !== 0 ? (realizedVal > 0 ? `<span style="color:#16a34a">+$${realizedVal.toFixed(2)}</span>` : `<span style="color:#dc2626">-$${Math.abs(realizedVal).toFixed(2)}</span>`) : '-';
+
+                let effBudget = data.baseBudget + ioVal + realizedVal;
+                let estCash = effBudget - (data.currentStep * (data.buyAmount || 1500));
+                let estStockVal = data.totalQty * data.basePrice;
+                let estTotalAsset = (estCash > 0 ? estCash : 0) + estStockVal;
+
+                let tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><b>${date}</b></td>
+                    <td>$${data.baseBudget}</td>
+                    <td>${ioStr}</td>
+                    <td>${realizedStr}</td>
+                    <td style="color:#1d4ed8; font-weight:bold;">$${estTotalAsset.toFixed(2)}</td>
+                    <td style="color:#ef4444; font-weight:bold;">$${data.basePrice.toFixed(2)}</td>
+                    <td>${data.currentStep}회차</td>
+                    <td style="color:#f59e0b; font-weight:bold;">${data.totalQty}주</td>
+                    <td style="font-size:11px; color:#64748b;">${dropStr}</td>
+                    <td>
+                        <button class="btn-small" onclick="loadLedgerDate('${date}')">불러오기</button>
+                        <button class="btn-small" onclick="deleteLedgerDate('${date}')" style="color:#ef4444;">삭제</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
         }
 
-        while (rawBuys.length > 0 && rawSells.length > 0) {
-            let b = rawBuys[0], s = rawSells[0];
-            if (b >= s) {
-                rawBuys.shift(); rawSells.shift();
-                addNet('sell', b + 0.01, 1);
-                addNet('buy', s - 0.01, 1);
-            } else { break; }
-        }
-
-        rawBuys.forEach(b => addNet('buy', b, 1));
-        rawSells.forEach(s => addNet('sell', s, 1));
-
-        let sellResults = [];
-        for (let p in netOrders.sell) sellResults.push({ price: parseFloat(p), qty: netOrders.sell[p] });
-        sellResults.sort((a, b) => b.price - a.price);
-
-        let buyResults = [];
-        for (let p in netOrders.buy) buyResults.push({ price: parseFloat(p), qty: netOrders.buy[p] });
-        buyResults.sort((a, b) => b.price - a.price);
-
-        sellList.innerHTML = sellResults.length === 0 ? '<div class="empty-slot">매도 주문 없음</div>' : '';
-        sellResults.forEach((item, index) => {
-            sellList.innerHTML += `<div class="order-card" style="display:flex; justify-content:space-between; padding:6px; font-weight:bold; border-bottom:1px solid #eee;"><span style="color:#3b82f6;">매도·LOC $${item.price.toFixed(2)}</span><span style="color:#3b82f6;">${item.qty}주</span></div>`;
-        });
-
-        buyList.innerHTML = buyResults.length === 0 ? '<div class="empty-slot">매수 주문 없음</div>' : '';
-        buyResults.forEach((item, index) => {
-            buyList.innerHTML += `<div class="order-card" style="display:flex; justify-content:space-between; padding:6px; font-weight:bold; border-bottom:1px solid #eee;"><span style="color:#ef4444;">매수·LOC $${item.price.toFixed(2)}</span><span style="color:#ef4444;">${item.qty}주</span></div>`;
-        });
-
-        let finalBuyNeedMoney = 0;
-        for (let p in netOrders.buy) finalBuyNeedMoney += parseFloat(p) * netOrders.buy[p];
-
-        cashDisplay.innerHTML = `<div class="info-box" style="margin-top:15px;">💰 <b>[${targetDate}] 퉁치기 체결 시 필요 예수금:</b> 약 <b>$${finalBuyNeedMoney.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> 필요</div>`;
-        resultBox.style.display = 'block';
-    };
-
-    window.renderBalanceTable = function() {
-        const tbody = document.getElementById('balance-tbody');
-        const tfoot = document.getElementById('balance-tfoot');
-        const krwDisplay = document.getElementById('krw-summary-display');
-        if(!tbody || !tfoot) return;
+        window.loadLedgerDate = function(dateStr) {
+            document.getElementById('currentDate').value = dateStr;
+            window.onDateChange();
+            window.switchTab(0);
+            alert(`[ ${dateStr} ] 당시 장부 데이터를 불러왔습니다.`);
+        };
         
-        let recordDate = document.getElementById('record-date').value;
-        let rateInput = document.getElementById('record-exchange-rate');
-        let closeInput = document.getElementById('record-close-price');
-        let closePrice = parseFloat(closeInput.value) || 0;
-        let exchangeRate = parseFloat(rateInput.value) || 0;
+        window.deleteLedgerDate = function(dateStr) {
+            if(confirm(`[ ${dateStr} ] 일자 장부를 삭제하시겠습니까? (복구 불가)`)) {
+                delete window.dailyDatabase[dateStr];
+                if(window.saveCloudDataInstant) window.saveCloudDataInstant();
+                updateLedgerTable();
+                alert('삭제되었습니다.');
+            }
+        };
 
-        tbody.innerHTML = '';
-        let totalShares = 0, totalCash = 0, totalValUSD = 0, totalInit = 0, totalWeightedCost = 0;
+        window.generateTable = function() {
+            autoSaveState();
+            let summary = updateSummaryDashboard();
 
-        window.strategies.forEach(strat => {
-            let currentShares = strat.defaultShares || 0;
-            let currentAvg = strat.defaultAvg || 0;
-            let currentCash = strat.defaultCash || 50000;
-            let initCash = strat.defaultInit || 50000;
+            const basePrice = parseFloat(document.getElementById('basePrice').value);
+            const anchorPrice = parseFloat(document.getElementById('anchorPrice').value) || basePrice; 
+            const dropRate = parseFloat(document.getElementById('dropRate').value);
+            const buyAmount = parseFloat(document.getElementById('buyAmount').value);
+            const currentStep = parseInt(document.getElementById('currentStep').value);
+            const totalQty = parseInt(document.getElementById('totalQty').value);
+            const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
 
-            let evaluationTotal = currentShares > 0 ? (currentShares * closePrice) + currentCash : currentCash;
-            let profitUSD = evaluationTotal - initCash;
-            let returnRate = initCash > 0 ? (profitUSD / initCash) * 100 : 0;
+            if(isNaN(basePrice) || isNaN(anchorPrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty)) {
+                return; // 필수 값이 없으면 스킵
+            }
 
-            totalShares += currentShares; totalCash += currentCash; totalValUSD += evaluationTotal; totalInit += initCash; totalWeightedCost += currentShares * currentAvg;
+            window.globalPendingBuys = [];
+            window.globalPendingSells = [];
 
-            tbody.innerHTML += `
-                <tr>
-                    <td><b>${strat.name}</b></td>
-                    <td><input type="number" id="bal-shares-${strat.id}" value="${currentShares}"></td>
-                    <td><input type="number" step="0.01" id="bal-avg-${strat.id}" value="${currentAvg.toFixed(2)}"></td>
-                    <td><input type="number" step="0.01" id="bal-cash-${strat.id}" value="${currentCash.toFixed(2)}"></td>
-                    <td><input type="number" step="0.01" id="bal-val-${strat.id}" value="${evaluationTotal.toFixed(2)}"></td>
-                    <td style="color:${profitUSD>=0?'#ef4444':'#3b82f6'}">$${profitUSD.toFixed(2)}</td>
-                    <td style="color:${returnRate>=0?'#ef4444':'#3b82f6'}">${returnRate >= 0 ? '▲' : '▼'}${Math.abs(returnRate).toFixed(1)}%</td>
-                    <td><input type="number" id="bal-init-${strat.id}" value="${initCash}"></td>
-                </tr>`;
-        });
+            let limitPrice = basePrice * 0.80; 
+            let merged = new Map();
 
-        let totProfit = totalValUSD - totalInit, totRet = totalInit > 0 ? (totProfit / totalInit) * 100 : 0;
-        let totalValKRW = totalValUSD * exchangeRate;
-        tfoot.innerHTML = `<tr><td>합계</td><td style="color:#ef4444;">${totalShares}</td><td>-</td><td style="color:#3b82f6;">$${totalCash.toFixed(2)}</td><td style="color:#1e3a8a;">$${totalValUSD.toFixed(2)}</td><td style="color:${totProfit>=0?'#ef4444':'#3b82f6'}">$${totProfit.toFixed(2)}</td><td style="color:${totRet>=0?'#ef4444':'#3b82f6'}">${totRet >= 0 ? '▲' : '▼'}${Math.abs(totRet).toFixed(1)}%</td><td>$${totalInit.toFixed(2)}</td></tr>`;
+            function getDropPercentText(targetPrice, currentClose) {
+                let diff = ((targetPrice - currentClose) / currentClose) * 100;
+                return `추가 (${diff.toFixed(1)}%)`;
+            }
 
-        if (krwDisplay) {
-            krwDisplay.innerHTML = `<div class="krw-summary-box"><span>💱 <b>원화 환산액</b> (₩${exchangeRate.toLocaleString()}/$1)</span><b>￦${totalValKRW.toLocaleString('ko-KR', {maximumFractionDigits: 0})}</b></div>`;
-        }
-    };
+            function addOrder(type, label, p, q) {
+                window.globalPendingBuys.push({
+                    category: type === 'A' ? 'drop' : 'updown',
+                    label: label,
+                    price: parseFloat(p.toFixed(2)),
+                    qty: q
+                });
 
-    window.updateBalanceLive = function() { window.renderBalanceTable(); };
-    window.saveDailyRecord = async function() { alert(`잔고 기록이 저장되었습니다.`); };
+                let key = p.toFixed(2);
+                if (!merged.has(key)) {
+                    merged.set(key, { price: parseFloat(key), qtyA: 0, qtyB: 0, labelA: '', labelB: '' });
+                }
+                let entry = merged.get(key);
+                if (type === 'A') {
+                    entry.qtyA += q;
+                    entry.labelA = label;
+                } else {
+                    entry.qtyB += q;
+                    entry.labelB = label;
+                }
+            }
 
-    function renderStrategyManageList() {
-        const container = document.getElementById('strategy-manage-list');
-        if(!container) return;
-        container.innerHTML = '';
-        window.strategies.forEach((strat, index) => {
-            container.innerHTML += `
-                <div class="strat-manage-box">
-                    <span style="font-weight:bold; width:30px;">#${index+1}</span>
-                    <input type="text" value="${strat.name}" style="flex:1; padding:8px; border:1px solid #cbd5e1; border-radius:6px;" oninput="window.strategies[${index}].name=this.value; window.saveCloudDataInstant();">
-                    <button class="delete-btn" onclick="deleteStrategy('${strat.id}')" style="font-size:14px; color:#ef4444; background:none; border:none; cursor:pointer; font-weight:bold;">🗑️ 삭제</button>
-                </div>
-            `;
-        });
-    }
+            if (summary.remainingSteps >= 2.0) {
+                let pA = basePrice - 0.01;
+                let qA = Math.floor(buyAmount / pA);
+                if (pA >= limitPrice && qA > 0) {
+                    addOrder('A', '떨법', pA, qA);
+                    let nA = qA + 1;
+                    while (true) {
+                        let p = buyAmount / nA;
+                        if (p < limitPrice || nA > 10000) break;
+                        if (p < pA) {
+                            addOrder('A', getDropPercentText(p, basePrice), p, 1);
+                        }
+                        nA++;
+                    }
+                }
+            }
 
-    window.addNewStrategy = async function() {
-        let nameInput = document.getElementById('new-strat-name');
-        let name = nameInput ? nameInput.value.trim().toUpperCase() : prompt("추가할 기법 이름 입력 (예: FEB)");
-        if(!name) return;
-        window.strategies.push({ 
-            id: 'strat_' + Date.now(), 
-            name: name, 
-            defaultMult: 1, 
-            defaultCash: 50000, 
-            defaultShares: 0, 
-            defaultAvg: 0, 
-            defaultInit: 50000,
-            algo: { currentDate: "2026-09-20", totalBudget: 24000, totalStepsSetting: 16, dropRate: 0.25, basePrice: 77.00, currentStep: 1, totalQty: 16, drops: [] }
-        });
-        await window.saveCloudDataInstant();
-        location.reload();
-    };
+            let currentDropsCount = getDropsFromScreen().length;
+            let combinedStep = currentStep + currentDropsCount;
+            let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
 
-    window.deleteStrategy = async function(stratId) {
-        if(window.strategies.length <= 1) { alert("최소 1개의 기법은 남아있어야 합니다."); return; }
-        if(!confirm("삭제하시겠습니까?")) return;
-        window.strategies = window.strategies.filter(s => s.id !== stratId);
-        await window.saveCloudDataInstant();
-        location.reload();
-    };
+            let pB = (effectiveStepForOrder === 0) ? (anchorPrice * 1.10) : (anchorPrice * (1 - (dropRate * effectiveStepForOrder) / 100));
+            
+            let maxQtyByCash = pB > 0 ? Math.floor(summary.remainingCash / pB) : 0;
+            let qB = Math.floor(buyAmount / pB);
+            if (qB > maxQtyByCash) qB = maxQtyByCash;
 
-    window.resetAllData = async function() {
-        if (!confirm("모든 데이터가 초기화됩니다. 계속하시겠습니까?")) return;
-        window.strategies = getDefaultStrategies();
-        window.allData = {};
-        window.historyData = [];
-        await window.saveCloudDataInstant();
-        location.reload();
-    };
+            if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0) {
+                addOrder('B', '업다운', pB, qB);
+                
+                let nB = qB + 1;
+                while (true) {
+                    let p = buyAmount / nB;
+                    let cashCheck = Math.floor(summary.remainingCash / p);
+                    if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
+                    if (p < pB) {
+                        addOrder('B', getDropPercentText(p, basePrice), p, 1);
+                    }
+                    nB++;
+                }
+            }
 
-    window.renderHistoryList = function() {};
-    window.toggleBalanceHistoryViewMode = function() {};
-</script>
+            let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 모든 매수 주문은 종가 기준 LOC로 진행되며, 업다운 하락간격은 [업다운 회차(${currentStep}) + 떨법 물량 개수(${currentDropsCount})]를 합산하여 적용됩니다.</div>`;
+
+            if (finalOrders.length > 0) {
+                buyHtml += `<table>
+                    <tr><th>구분</th><th>LOC 매수 단가($)</th><th>주문 수량</th></tr>`;
+                
+                finalOrders.forEach(order => {
+                    let finalLabel = '';
+                    let finalClass = '';
+                    let totalQ = order.qtyA + order.qtyB;
+
+                    if (order.qtyA > 0 && order.qtyB > 0) {
+                        let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
+                        finalLabel = percentText ? `추가방어 (${percentText})` : `추가방어`;
+                        finalClass = 'label-joint';
+                    } else if (order.qtyA > 0) {
+                        finalLabel = order.labelA;
+                        finalClass = 'label-drop';
+                    } else {
+                        finalLabel = order.labelB;
+                        finalClass = 'label-updown';
+                    }
+
+                    buyHtml += `
+                        <tr>
+                            <td class="${finalClass}">${finalLabel}</td>
+                            <td class="price-col">${order.price.toFixed(2)}</td>
+                            <td class="qty-col">${totalQ}</td>
+                        </tr>
+                    `;
+                });
+                buyHtml += `</table>`;
+            } else {
+                buyHtml += `<div class="empty-message">잔여 자금이 부족하거나 매수 조건에 맞는 주문이 없습니다.</div>`;
+            }
+            document.getElementById('buyResultArea').innerHTML = buyHtml;
+
+            let sellHtml = '';
+            
+            if (currentStep > 0) {
+                let sellQty = Math.floor(totalQty / currentStep);
+                if (sellQty > 0) {
+                    window.globalPendingSells.push({
+                        category: 'updown',
+                        type: `업다운`,
+                        price: parseFloat(basePrice.toFixed(2)),
+                        qty: sellQty,
+                        class: 'label-updown'
+                    });
+                }
+            }
+
+            let currentDrops = getDropsFromScreen();
+            let dropCount = 1;
+            currentDrops.forEach(d => {
+                window.globalPendingSells.push({
+                    category: 'drop',
+                    type: `떨법${dropCount}`,
+                    price: parseFloat(d.price.toFixed(2)),
+                    qty: d.qty,
+                    class: 'label-drop'
+                });
+                dropCount++;
+            });
+
+            if (window.globalPendingSells.length > 0) {
+                sellHtml += `<div class="info-box">💡 <b>매도 주문 (LOC):</b> 업다운 및 떨법 물량 모두 종가 기준 LOC 매도로 세팅됩니다.</div>`;
+                sellHtml += `<table>
+                    <tr><th>구분</th><th>LOC 매도 단가($)</th><th>주문 수량</th></tr>`;
+                window.globalPendingSells.forEach(order => {
+                    sellHtml += `
+                        <tr>
+                            <td class="${order.class}">${order.type}</td>
+                            <td class="price-col">${order.price.toFixed(2)}</td>
+                            <td class="qty-col">${order.qty}</td>
+                        </tr>
+                    `;
+                });
+                sellHtml += `</table>`;
+            } else {
+                sellHtml = '<div class="empty-message">매도할 보유 물량이 없습니다.</div>';
+            }
+            
+            document.getElementById('sellResultArea').innerHTML = sellHtml;
+        };
+    </script>
 </body>
 </html>
