@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V48 완벽 통합본)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V49 - 실현손익 자동 누적 완벽 통합본)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -236,7 +236,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V48 - 기준운용금액 및 입출금 연동 완벽 보완)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V49 - 실현손익 자동 누적 보완)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -540,8 +540,7 @@
                     
                     if (lastData && lastData[st]) {
                         let prev = lastData[st];
-                        // 🛠️ 핵심 수정: 이전일 기준운용금액 + 이전일 입출금 합산을 새로운 '기준운용금액'으로 이월, 당일 입출금(io)은 0으로 초기화
-                        let carriedBudget = (prev.baseBudget || 0) + (prev.io || 0);
+                        let carriedBudget = prev.baseBudget || 0;
                         let carriedBasePrice = prev.basePrice || 0;
                         let carriedAnchorPrice = prev.anchorPrice || carriedBasePrice;
 
@@ -729,7 +728,6 @@
             
             let totalAsset = remainingCash + totalEvalValue;
 
-            // 🛠️ 핵심 연동: 평가손익 및 총수익률이 기준운용금액(입출금 반영된 실질 원금)을 기준으로 정확하게 연동되도록 보완
             let totalProfitSum = totalAsset - effectiveBudget; 
             let totalReturn = effectiveBudget > 0 ? (totalProfitSum / effectiveBudget) * 100 : 0;
             if (Math.abs(totalReturn) < 0.01) totalReturn = 0;
@@ -906,6 +904,7 @@
                     type: `떨법${dropCount}`,
                     price: parseFloat(d.price.toFixed(2)),
                     qty: d.qty,
+                    anchorCost: d.price, // 매도가 계산용 원가 보존
                     class: 'label-drop'
                 });
                 dropCount++;
@@ -926,7 +925,7 @@
                 });
                 sellHtml += `</table>`;
             } else {
-                sellHtml = '<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>';
+                sellHtml = '<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
             }
             
             document.getElementById('sellResultArea').innerHTML = sellHtml;
@@ -952,7 +951,6 @@
             window.strategyNames.forEach(st => {
                 let currentStData = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
                 window.dailyDatabase[nextDateStr][st] = JSON.parse(JSON.stringify(currentStData));
-                window.dailyDatabase[nextDateStr][st].baseBudget = (currentStData.baseBudget || 0) + (currentStData.io || 0);
                 window.dailyDatabase[nextDateStr][st].io = 0; 
             });
 
@@ -998,10 +996,14 @@
             let newlyBoughtDropQty = 0;
             let soldUpDownQty = 0;
             let soldDropQty = 0;
+            
+            // 🔥 [실현 손익 계산 변수 추가] 매도로 인해 확정된 수익금 누적
+            let realizedProfitGenerated = 0;
 
             let isUpDownBought = false;
             let isUpDownSold = false;
 
+            // 매수 체결 확인
             window.globalPendingBuys.forEach(order => {
                 if (nextClosePrice <= order.price) {
                     if (order.category === 'updown') {
@@ -1013,16 +1015,21 @@
                 }
             });
 
+            // 매도 체결 확인 및 실현 손익 계산
             window.globalPendingSells.forEach(order => {
                 if (nextClosePrice >= order.price) {
                     if (order.category === 'updown') {
                         soldUpDownQty += order.qty;
                         isUpDownSold = true;
+                        // 업다운 매도 차익 = (매도가 - 기존 앵커평단가) * 수량
+                        realizedProfitGenerated += (nextClosePrice - oldAnchorPrice) * order.qty;
                     } else if (order.category === 'drop') {
                         let idx = currentDropHoldings.findIndex(h => !h.matched && Math.abs(h.price - order.price) < 0.001 && h.qty === order.qty);
                         if(idx !== -1) {
                             currentDropHoldings[idx].matched = true;
                             soldDropQty += order.qty;
+                            // 떨법 매도 차익 = (매도가 - 떨법매수가) * 수량
+                            realizedProfitGenerated += (nextClosePrice - currentDropHoldings[idx].price) * order.qty;
                         }
                     }
                 }
@@ -1066,8 +1073,8 @@
             let currentBaseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
             let currentIoVal = parseFloat(document.getElementById('dailyIo').value) || 0;
             
-            // 🛠️ 핵심 연동: 결산 시 당일 입출금(io)이 기준 운용금액에 완벽히 반영되어 다음날로 이월
-            let nextBaseBudgetVal = currentBaseBudgetVal + currentIoVal;
+            // 🔥 [결산 핵심 보완] 기준운용금액 + 입출금 + 매도 실현수익이 모두 합산되어 다음날 운용 원금으로 완벽 이월됨!
+            let nextBaseBudgetVal = currentBaseBudgetVal + currentIoVal + realizedProfitGenerated;
 
             if(!window.dailyDatabase[currentDateStr]) {
                 window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
@@ -1090,10 +1097,17 @@
             dateObj.setDate(dateObj.getDate() + 1);
             const yyyy = dateObj.getFullYear();
             const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const dd = String(dateObj.getDate()).padStart(2, '0');
+            const dd = String(dateObj.getDate() + 1).padStart(2, '0'); // 수정: 올바른 날짜 포맷
             let nextDateStr = `${yyyy}-${mm}-${dd}`;
             
-            nextDateStr = getValidBusinessDay(nextDateStr);
+            // 주말 건너뛰기 로직 보완
+            let tempD = new Date(currentDateStr);
+            tempD.setDate(tempD.getDate() + 1);
+            while(tempD.getDay() === 0 || tempD.getDay() === 6) {
+                tempD.setDate(tempD.getDate() + 1);
+            }
+            let offset = tempD.getTimezoneOffset() * 60000;
+            nextDateStr = (new Date(tempD - offset)).toISOString().split('T')[0];
 
             if (!window.dailyDatabase[nextDateStr]) {
                 window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
@@ -1102,7 +1116,7 @@
             window.strategyNames.forEach(st => {
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
-                        baseBudget: nextBaseBudgetVal, 
+                        baseBudget: nextBaseBudgetVal, // 실현 수익이 합산된 원금 이월
                         io: 0,                           
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
@@ -1130,7 +1144,7 @@
             
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
 
-            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료!\n- 당일 장부는 체결 전 상태로 보존됩니다.\n- 체결 내역($${nextClosePrice})은 다음날 영업일 [ ${nextDateStr} ] 장부로 이월되었습니다.${absorptionMsg}`);
+            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료!\n- 매도 실현 손익($${realizedProfitGenerated.toFixed(2)})이 기준 운용금액에 반영되었습니다.\n- 다음 영업일 [ ${nextDateStr} ] 장부로 정상 이월되었습니다.${absorptionMsg}`);
         };
 
         window.updateTab1Calculations = function() {
@@ -1158,7 +1172,6 @@
                     let totalH = (d.totalQty || 0) + dropQty;
                     let totalCost = ((d.totalQty || 0) * (d.anchorPrice || 0)) + dropCost;
                     
-                    // 🛠️ 핵심 연동: 실질 운용 원금 = 기준운용금액 + 당일 입출금 합산으로 일관성 유지
                     let effectiveBudget = (d.baseBudget || 0) + (d.io || 0);
                     let cash = Math.max(0, effectiveBudget - totalCost);
                     
@@ -1413,8 +1426,10 @@
                 }
             }
 
-           [cite: 2]window.strategyDates[newName] = window.strategyDates[oldName];
-            delete window.strategyDates[oldName];
+            if (window.strategyDates[oldName]) {
+                window.strategyDates[newName] = window.strategyDates[oldName];
+                delete window.strategyDates[oldName];
+            }
 
             if (window.currentActiveStrategy === oldName) {
                 window.currentActiveStrategy = newName;
