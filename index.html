@@ -984,22 +984,28 @@
             const currentDateStr = document.getElementById('currentDate').value;
             const currentDayRealBasePrice = parseFloat(document.getElementById('basePrice').value) || 0;
 
-            // 🔥 [핵심 수정] 종가를 prompt() 창에서 "다시" 입력받지 않습니다.
-            // 기존 버전은 화면 상단의 "당일 기준 가격(오늘 종가)" 입력창과, 결산 시 뜨는
-            // prompt() 창에 종가를 "두 번" 따로 입력해야 했습니다. 이 둘의 값이 서로
-            // 다르게 입력되면(오타, 갱신 누락 등) 주문 생성(generateTable)과 실제 체결
-            // 판정(아래 로직), 그리고 잔고&일별기록의 평가총합/누적손익률이 서로 다른
-            // 종가를 기준으로 계산되어 정보가 어긋나는 문제가 발생했습니다.
-            // 이제는 이미 "당일 기준 가격(오늘 종가)" 칸에 입력해 둔 값을 그대로
-            // 오늘의 확정 종가로 사용하여, 주문 생성 → 체결 판정 → 잔고 기록이
-            // 항상 동일한 종가를 기준으로 일관되게 계산되도록 했습니다.
-            if (!currentDayRealBasePrice || currentDayRealBasePrice <= 0) {
-                alert("먼저 위쪽 '당일 기준 가격 (오늘 종가)' 칸에 오늘자 실제 종가를 입력한 뒤,\n다시 [다음날 장마감 종가] 버튼을 눌러주세요.");
+            // 🔥 [핵심 수정] "오늘 종가"와 "다음 거래일 실제 종가"는 서로 다른 날짜의 값입니다.
+            // (오늘 종가 기준으로 예약 매수/매도(LOC) 주문을 만들어두고, 다음 거래일의
+            //  실제 종가가 들어오면 그 가격에 따라 체결 여부가 결정되는 구조입니다.)
+            // 기존 코드는 이 팝업의 안내 문구에 "currentDateStr(오늘 날짜)"가 표시되어,
+            // 사용자가 "오늘 종가를 또 입력하라는 건가?"하고 헷갈려서 이미 위 칸에 입력한
+            // 오늘 종가를 실수로 다시 입력하기 쉬운 구조였습니다. 이렇게 되면 실제로는
+            // "다음 거래일 종가" 자리에 "오늘 종가"가 들어가 버려서, 그 이후 잔고 기록의
+            // 평가총합/누적손익률이 실제 시세 흐름과 어긋나기 시작합니다.
+            // → 다음 거래일 날짜를 먼저 계산해서 팝업 문구에 정확히 표시하도록 고쳤습니다.
+            let nextDateObjForPrompt = new Date(currentDateStr);
+            nextDateObjForPrompt.setDate(nextDateObjForPrompt.getDate() + 1);
+            let nextDateStr = `${nextDateObjForPrompt.getFullYear()}-${String(nextDateObjForPrompt.getMonth() + 1).padStart(2, '0')}-${String(nextDateObjForPrompt.getDate()).padStart(2, '0')}`;
+            nextDateStr = getValidBusinessDay(nextDateStr);
+
+            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ]\n오늘(${currentDateStr}) 종가 $${currentDayRealBasePrice.toFixed(2)} 기준으로 예약해 둔 매수/매도(LOC) 주문이 있습니다.\n\n👉 다음 거래일 [ ${nextDateStr} ]의 실제 장마감 종가를 입력하세요:\n(오늘 종가가 아니라, 반드시 "내일(${nextDateStr})"의 실제 종가를 입력해야 합니다)`);
+            if (closeStr === null || closeStr.trim() === '') return;
+
+            const nextClosePrice = parseFloat(closeStr);
+            if (isNaN(nextClosePrice) || nextClosePrice <= 0) {
+                alert("올바른 종가를 입력해주세요.");
                 return;
             }
-            if (!confirm(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr}\n장마감 종가를 $${currentDayRealBasePrice.toFixed(2)} 로 확정하고 결산하시겠습니까?\n\n(※ 이 값은 위쪽 '당일 기준 가격(오늘 종가)' 입력창의 값입니다. 값이 다르면 취소 후 먼저 수정해주세요.)`)) return;
-
-            const nextClosePrice = currentDayRealBasePrice;
 
             let oldStep = parseInt(document.getElementById('currentStep').value);
             let totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
@@ -1116,15 +1122,9 @@
                 drops: JSON.parse(JSON.stringify(rawDropsOnCurrentDay)) 
             };
 
-            let dateObj = new Date(currentDateStr);
-            dateObj.setDate(dateObj.getDate() + 1);
-            const yyyy = dateObj.getFullYear();
-            const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const dd = String(dateObj.getDate()).padStart(2, '0');
-            let nextDateStr = `${yyyy}-${mm}-${dd}`;
-            
-            nextDateStr = getValidBusinessDay(nextDateStr);
-
+            // 🔥 [핵심 수정] nextDateStr은 위에서(팝업 문구를 만들 때) 이미 계산해 두었으므로
+            // 여기서 다시 계산하지 않고 그대로 재사용합니다. (동일한 변수를 두 번 계산하면
+            // 값이 어긋날 위험이 있어 한 곳에서만 계산하도록 통일했습니다.)
             if (!window.dailyDatabase[nextDateStr]) {
                 window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
             }
