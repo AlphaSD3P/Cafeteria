@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>카페테리아 & 잔고 일별 기록 시스템 (V41 통합본)</title>
+    <title>카페테리아 & 잔고 일별 기록 시스템 (V43 통합본)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -67,16 +67,16 @@
                 if (docSnap.exists()) {
                     const cloudVal = docSnap.data();
                     window.dailyDatabase = cloudVal.dailyDatabase || {};
-                    window.strategyNames = cloudVal.strategyNames !== undefined ? cloudVal.strategyNames : ['스', '윙', '장', '투'];
+                    window.strategyNames = cloudVal.strategyNames !== undefined ? cloudVal.strategyNames : [];
                 } else {
                     window.dailyDatabase = {};
-                    window.strategyNames = ['스', '윙', '장', '투'];
+                    window.strategyNames = [];
                     await window.saveCloudDataInstant();
                 }
             } catch (e) {
                 console.error("클라우드 로드 실패:", e);
                 window.dailyDatabase = {};
-                window.strategyNames = ['스', '윙', '장', '투'];
+                window.strategyNames = [];
             }
             
             window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
@@ -234,7 +234,7 @@
 
         <div class="header">
             <h2>카페테리아 & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V41 - 누적 실현손익 완벽 반영)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V43 - 입출금 실시간 자산 반영)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -351,8 +351,8 @@
                 </div>
 
                 <div class="action-row">
-                    <button class="btn-generate" onclick="generateTable()">⚡ [현재 기법] 오늘자 주문 생성</button>
-                    <button class="btn-nextday" onclick="processSettlement()">📝 [현재 기법] 장 마감 결산 반영 (이월)</button>
+                    <button class="btn-generate" onclick="generateTable()">⚡ 오늘자 주문 생성</button>
+                    <button class="btn-nextday" onclick="processSettlement()">📝 다음날 장마감 종가</button>
                 </div>
             </div>
 
@@ -430,7 +430,7 @@
 
     <script>
         window.dailyDatabase = {};
-        window.strategyNames = []; // 💡 초기 기법 목록 빈 배열로 설정
+        window.strategyNames = [];
         window.currentActiveStrategy = '';
         window.strategyDates = {}; 
         window.isFilterDateOnly = false;
@@ -461,7 +461,6 @@
                 container.innerHTML = '<div style="color:#94a3b8; font-size:13px; text-align:center; width:100%;">등록된 매매기법이 없습니다. [기법 관리] 탭에서 기법을 추가하세요.</div>';
                 document.getElementById('currentStrategyNameDisplay').textContent = "없음";
                 
-                // 💡 기법이 없을 때 폼 및 대시보드 0으로 강제 클리어
                 applyDataToForm(getDefaultStrategyData());
                 updateSummaryDashboard(true);
                 return;
@@ -520,7 +519,8 @@
                     if (lastData && lastData[st]) {
                         let prev = lastData[st];
                         let carriedRealized = prev.realizedProfit || 0;
-                        let carriedBudget = (prev.baseBudget || 0) + (prev.io || 0) + carriedRealized;
+                        // 💡 날짜 이월 시 당일 입출금(io)은 0으로 초기화하고, 수기 입력된 기준 원금(baseBudget)과 실현손익을 이월
+                        let carriedBudget = (prev.baseBudget || 0) + carriedRealized;
 
                         window.dailyDatabase[dateStr][st] = {
                             baseBudget: carriedBudget,
@@ -659,6 +659,7 @@
         function getEffectiveTotalBudget() {
             let baseBudget = parseFloat(document.getElementById('baseBudget').value) || 0;
             let ioAmount = parseFloat(document.getElementById('dailyIo').value) || 0;
+            // 💡 기준 운용금액(수기 고정)에 당일 입출금(+/-)을 합산한 유효 원금 계산
             return baseBudget + ioAmount;
         }
 
@@ -684,7 +685,8 @@
             let currentData = window.dailyDatabase[dateStr][window.currentActiveStrategy] || {};
             let realizedProfit = currentData.realizedProfit || 0;
 
-            const totalBudget = getEffectiveTotalBudget() + realizedProfit;
+            const effectiveBudget = getEffectiveTotalBudget();
+            const totalBudget = effectiveBudget + realizedProfit;
             const buyAmountPerStep = parseFloat(document.getElementById('buyAmount').value) || 0;
             const updownQty = parseInt(document.getElementById('totalQty').value) || 0;
             const currentPrice = parseFloat(document.getElementById('basePrice').value) || 0;
@@ -711,14 +713,11 @@
             let avgPrice = totalHoldingCount > 0 ? (totalCost / totalHoldingCount) : 0;
             let totalEvalValue = totalHoldingCount * currentPrice;
             
-            let evalProfit = totalHoldingCount > 0 ? (totalEvalValue - totalCost) : 0;
-            if (Math.abs(evalProfit) < 0.5) evalProfit = 0;
-
             let totalAsset = remainingCash + totalEvalValue;
 
-            let initialBaseBudget = parseFloat(document.getElementById('baseBudget').value) || 0;
-            let totalProfitSum = totalAsset - initialBaseBudget; 
-            let totalReturn = initialBaseBudget > 0 ? (totalProfitSum / initialBaseBudget) * 100 : 0;
+            // 💡 평가손익 및 수익률은 수기 입력한 '기준 운용금액(baseBudget)'을 기준으로 산출
+            let totalProfitSum = totalAsset - effectiveBudget; 
+            let totalReturn = effectiveBudget > 0 ? (totalProfitSum / effectiveBudget) * 100 : 0;
             if (Math.abs(totalReturn) < 0.01) totalReturn = 0;
 
             document.getElementById('totalAssetSum').value = totalAsset.toFixed(2) + " $";
@@ -926,7 +925,7 @@
             }
 
             const currentDateStr = document.getElementById('currentDate').value;
-            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr} 마감 종가를 입력하세요:`);
+            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr} 다음날 장마감 종가를 입력하세요:`);
             if (closeStr === null || closeStr.trim() === '') return;
             
             const closePrice = parseFloat(closeStr);
@@ -940,7 +939,6 @@
             let buyAmountPerStep = parseFloat(document.getElementById('buyAmount').value) || 1500;
             let oldAnchorPrice = parseFloat(document.getElementById('anchorPrice').value) || closePrice;
             let oldQty = parseInt(document.getElementById('totalQty').value);
-            let currentIo = parseFloat(document.getElementById('dailyIo').value) || 0;
 
             let currentDropHoldings = [];
             getDropsFromScreen().forEach(d => {
@@ -992,7 +990,9 @@
             if (newStep < 0) newStep = 0;
 
             let newAnchorPrice = oldAnchorPrice;
-            if (isUpDownBought || isUpDownSold) newAnchorPrice = closePrice;
+            if (isUpDownBought || isUpDownSold) {
+                newAnchorPrice = closePrice;
+            }
 
             let newQty = oldQty + newlyBoughtUpDownQty - soldUpDownQty;
             if (newQty < 0) newQty = 0;
@@ -1017,16 +1017,17 @@
                 finalDrops = [];          
             }
 
-            let baseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
-            let currentEffectiveBudget = baseBudgetVal + currentIo + realizedProfitAdd;
+            // 💡 결산 시 다음날로 이월되는 기준 운용금액은 [수기 입력된 기준 운용금액 + 발생한 실현손익]으로 산정
+            let currentBaseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
+            let nextEffectiveBudget = currentBaseBudgetVal + realizedProfitAdd;
 
             if(!window.dailyDatabase[currentDateStr]) {
                 window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
             }
 
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
-                baseBudget: baseBudgetVal,
-                io: currentIo,
+                baseBudget: currentBaseBudgetVal,
+                io: parseFloat(document.getElementById('dailyIo').value) || 0,
                 realizedProfit: realizedProfitAdd,
                 totalSteps: totalStepsLimit,
                 buyAmount: buyAmountPerStep,
@@ -1053,8 +1054,8 @@
                 let prev = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
-                        baseBudget: currentEffectiveBudget,
-                        io: 0,
+                        baseBudget: nextEffectiveBudget, // 다음날 새로운 수기 기준 운용금액 원금으로 반영
+                        io: 0,                           // 입출금은 당일성 이므로 다음날 0으로 초기화
                         realizedProfit: 0,
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
@@ -1066,8 +1067,7 @@
                         drops: JSON.parse(JSON.stringify(finalDrops))
                     };
                 } else {
-                    let carriedRealized = prev.realizedProfit || 0;
-                    let carriedBudget = (prev.baseBudget || 0) + (prev.io || 0) + carriedRealized;
+                    let carriedBudget = (prev.baseBudget || 0) + (prev.realizedProfit || 0);
                     window.dailyDatabase[nextDateStr][st] = {
                         ...prev,
                         baseBudget: carriedBudget,
@@ -1120,13 +1120,13 @@
                     let evalVal = totalH * strategyClosePrice;
                     let profit = totalH > 0 ? (evalVal - totalCost) : 0;
                     
-                    let returnRate = budget > 0 ? ((profit + realized) / (budget - realized)) * 100 : 0;
+                    let returnRate = (d.baseBudget || 0) > 0 ? ((profit + realized) / d.baseBudget) * 100 : 0;
 
                     sumQty += totalH;
                     sumCash += cash;
                     sumEval += evalVal + cash;
                     sumProfit += (profit + realized);
-                    sumBudget += (budget - realized);
+                    sumBudget += (d.baseBudget || 0);
 
                     let profitClass = (profit + realized) >= 0 ? 'profit-text' : 'loss-text';
                     let sign = (profit + realized) >= 0 ? '▲' : '▼';
@@ -1140,7 +1140,7 @@
                             <td>$${(evalVal + cash).toFixed(2)}</td>
                             <td class="${profitClass}">$${(profit + realized).toFixed(2)}</td>
                             <td class="${profitClass}">${sign} ${Math.abs(returnRate).toFixed(1)}%</td>
-                            <td>$${(budget - realized).toFixed(0)}</td>
+                            <td>$${(d.baseBudget || 0).toFixed(0)}</td>
                         </tr>
                     `;
                 });
@@ -1178,9 +1178,7 @@
                     let pDropCost = (pd.drops || []).reduce((s, x) => s + (x.price * x.qty), 0);
                     let pH = (pd.totalQty || 0) + pDropQty;
                     let pCost = ((pd.totalQty || 0) * (pd.anchorPrice || 0)) + pDropCost;
-                    let pRealized = pd.realizedProfit || 0;
-                    let pBudget = (pd.baseBudget || 0) + (pd.io || 0) + pRealized;
-                    let pCash = Math.max(0, pBudget - pCost);
+                    let pCash = Math.max(0, (pd.baseBudget || 0) - pCost);
                     let pStrategyClose = pd.basePrice || 0;
                     prevSumEval += (pH * pStrategyClose) + pCash;
                 });
@@ -1414,7 +1412,6 @@
             window.renderDynamicTabs();
             window.renderManageList();
             
-            // 💡 초기화 직후 폼 및 대시보드 0으로 즉시 클리어 및 강제 저장
             applyDataToForm(getDefaultStrategyData());
             updateSummaryDashboard(true);
             
