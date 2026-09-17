@@ -79,14 +79,17 @@
                 window.strategyNames = ['스', '윙', '장', '투'];
             }
             
-            let sortedDates = Object.keys(window.dailyDatabase).sort();
-            let targetDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : getTodayStr();
-            
             window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
+            window.strategyDates = {};
             
-            // 전역 날짜 설정
-            document.getElementById('currentDate').value = targetDate;
-            document.getElementById('currentDateTab1').value = targetDate;
+            // 💡 초기 세팅 시 무조건 '오늘 날짜'로 고정 및 기법별 날짜 독립화
+            const todayStr = getTodayStr();
+            window.strategyNames.forEach(st => {
+                window.strategyDates[st] = todayStr;
+            });
+            
+            document.getElementById('currentDate').value = window.strategyDates[window.currentActiveStrategy] || todayStr;
+            document.getElementById('currentDateTab1').value = todayStr;
             
             window.renderDynamicTabs();
             window.onDateChange();
@@ -109,7 +112,6 @@
     </script>
 
     <style>
-        /* 카페테리아 + 인스6 공통 및 병합 CSS */
         body { 
             font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; 
             background-color: #f8fafc; 
@@ -143,7 +145,6 @@
         .tab-content { display: none; }
         .tab-content.active-content { display: block; }
 
-        /* 인스6 V41 레이아웃 (mainTab0) */
         .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
         .top-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
         .triple-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px; }
@@ -184,10 +185,8 @@
         .label-updown { color: #ea580c; font-weight: bold; }
         .label-drop { color: #9333ea; font-weight: bold; }
         .label-joint { color: #059669; font-weight: bold; }
-
         .info-box { background-color: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 8px; border-radius: 4px; font-size: 11px; margin-bottom: 10px; }
 
-        /* 잔고&일별기록 (mainTab1) CSS */
         .top-input-bar { display: flex; gap: 15px; justify-content: space-between; align-items: center; background: #f8fafc; padding: 12px 18px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px; }
         .input-item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; }
         .input-item input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: bold; width: 130px; text-align: right; }
@@ -239,17 +238,15 @@
             <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V41 - 누적 실현손익 완벽 반영)</div>
         </div>
 
-        <!-- 상단 기법 구분 탭 -->
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
         
-        <!-- 메인 메뉴 탭 -->
         <div class="main-tabs">
             <div class="active" onclick="switchMainTab(0)">📝 매매 입력 (자동주문)</div>
             <div onclick="switchMainTab(1)">📉 잔고&일별기록</div>
             <div onclick="switchMainTab(2)">⚙️ 기법 관리</div>
         </div>
 
-        <!-- [메인 탭 0] 매매 입력 (인스6.html V41 적용) -->
+        <!-- [메인 탭 0] 매매 입력 -->
         <div id="mainTab0" class="tab-content active-content">
             <div class="settings-panel">
                 <div style="font-size: 15px; font-weight: bold; color: #ea580c; margin-bottom: 12px;">
@@ -288,7 +285,6 @@
                 </div>
 
                 <div class="triple-row">
-                    <!-- 1. 실시간 자산 대시보드 -->
                     <div class="card-box" style="background: #f8fafc; border: 1px solid #cbd5e1;">
                         <div class="card-title"><span style="color:#1d4ed8">■ 실시간 자산 대시보드</span></div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -323,7 +319,6 @@
                         </div>
                     </div>
 
-                    <!-- 2. 업다운 상태 입력 -->
                     <div class="card-box">
                         <div class="card-title"><span style="color:#ea580c">■ 업다운 상태 입력</span></div>
                         <div class="input-group">
@@ -346,14 +341,12 @@
                         </div>
                     </div>
 
-                    <!-- 3. 떨법 물량 -->
                     <div class="card-box">
                         <div class="card-title">
                             <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
                             <button onclick="addDropRow()" style="font-size:11px; cursor:pointer; background:none; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px;">+ 수동추가</button>
                         </div>
                         <div id="dropHoldingsContainer" style="max-height: 220px; overflow-y: auto;">
-                            <!-- 동적 생성 -->
                         </div>
                     </div>
                 </div>
@@ -364,7 +357,6 @@
                 </div>
             </div>
 
-            <!-- 매수/매도 좌우 2단 배치 섹션 -->
             <div class="orders-container">
                 <div class="result-section">
                     <div class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</div>
@@ -386,7 +378,6 @@
             <div class="top-input-bar">
                 <div class="input-item">
                     <span>📅 기록 날짜 보기</span>
-                    <!-- Tab1용 날짜 선택기 (Tab0와 연동됨) -->
                     <input type="date" id="currentDateTab1" onchange="document.getElementById('currentDate').value = this.value; window.onDateChange();">
                 </div>
                 <div class="input-item">
@@ -442,6 +433,7 @@
         window.dailyDatabase = {};
         window.strategyNames = ['스', '윙', '장', '투'];
         window.currentActiveStrategy = '';
+        window.strategyDates = {}; // 💡 기법별 독립된 날짜 관리를 위한 객체
         window.isFilterDateOnly = false;
         
         window.globalPendingBuys = [];
@@ -449,7 +441,10 @@
 
         function getTodayStr() {
             let d = new Date();
-            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            // 로컬 타임존 반영하여 YYYY-MM-DD 생성
+            let offset = d.getTimezoneOffset() * 60000;
+            let localISOTime = (new Date(d - offset)).toISOString().split('T')[0];
+            return localISOTime;
         }
 
         window.switchMainTab = function(index) {
@@ -480,6 +475,8 @@
                 if (st === window.currentActiveStrategy) btn.classList.add('active');
                 btn.onclick = () => {
                     window.currentActiveStrategy = st;
+                    // 💡 다른 기법 탭 클릭 시, 해당 기법이 기억하고 있던 날짜(없으면 오늘)로 세팅
+                    document.getElementById('currentDate').value = window.strategyDates[st] || getTodayStr(); 
                     window.renderDynamicTabs();
                     window.onDateChange();
                     window.switchMainTab(0);
@@ -489,7 +486,6 @@
             document.getElementById('currentStrategyNameDisplay').textContent = window.currentActiveStrategy || "없음";
         };
 
-        // 인스6.html V41 구조에 맞춘 기본 데이터 모델
         function getDefaultStrategyData() {
             return { 
                 baseBudget: 24000, 
@@ -509,7 +505,11 @@
         window.onDateChange = function() {
             const dateStr = document.getElementById('currentDate').value;
             if (!dateStr) return;
-            document.getElementById('currentDateTab1').value = dateStr;
+            
+            // 💡 현재 선택된 기법의 날짜를 독립적으로 업데이트
+            if (window.currentActiveStrategy) {
+                window.strategyDates[window.currentActiveStrategy] = dateStr;
+            }
 
             if (!window.dailyDatabase[dateStr]) {
                 let sortedDates = Object.keys(window.dailyDatabase).sort();
@@ -521,7 +521,6 @@
                 window.strategyNames.forEach(st => {
                     if (lastData && lastData[st]) {
                         let prev = lastData[st];
-                        // 이월 처리 (입출금 초기화, 실현손익 이월)
                         let carriedRealized = prev.realizedProfit || 0;
                         let carriedBudget = (prev.baseBudget || 0) + (prev.io || 0) + carriedRealized;
 
@@ -1002,7 +1001,6 @@
             let baseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
             let currentEffectiveBudget = baseBudgetVal + currentIo + realizedProfitAdd;
 
-            // 현재 날짜 저장
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
                 baseBudget: baseBudgetVal,
                 io: currentIo,
@@ -1017,7 +1015,6 @@
                 drops: finalDrops
             };
 
-            // 다음 날짜로 전체 장부 이월 (다른 기법들도 함께 이월됨)
             let dateObj = new Date(currentDateStr);
             dateObj.setDate(dateObj.getDate() + 1);
             const yyyy = dateObj.getFullYear();
@@ -1029,7 +1026,6 @@
                 window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
             }
 
-            // 전체 기법 다음날로 복사 (현재 선택된 기법은 결산값 적용)
             window.strategyNames.forEach(st => {
                 let prev = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
                 if (st === window.currentActiveStrategy) {
@@ -1059,8 +1055,11 @@
                 }
             });
 
+            // 💡 결산 시 해당 기법의 독립된 날짜도 다음 날로 이월 처리
+            window.strategyDates[window.currentActiveStrategy] = nextDateStr;
             document.getElementById('currentDate').value = nextDateStr;
             window.onDateChange();
+            
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
 
             alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료! (실현손익: $${realizedProfitAdd.toFixed(2)}, 종가: $${closePrice})${absorptionMsg}\n\n👉 [ ${nextDateStr} ](다음 날) 장부 데이터로 전체 기법이 이월되었습니다.`);
@@ -1099,8 +1098,6 @@
                     let evalVal = totalH * strategyClosePrice;
                     let profit = totalH > 0 ? (evalVal - totalCost) : 0;
                     
-                    // 총 누적 수익금 = 평가손익 + 당일 실현손익 + (기존 baseBudget 증가분) - 초기원금
-                    // 여기서는 현재 자산 기준 수익률로 단순화
                     let returnRate = budget > 0 ? ((profit + realized) / (budget - realized)) * 100 : 0;
 
                     sumQty += totalH;
@@ -1313,6 +1310,8 @@
             if (window.strategyNames.includes(name)) return alert("이미 존재하는 기법입니다.");
 
             window.strategyNames.push(name);
+            window.strategyDates[name] = getTodayStr(); // 💡 새 기법 추가 시 기본 날짜를 '오늘'로 세팅
+
             if (window.strategyNames.length === 1) {
                 window.currentActiveStrategy = name;
             }
@@ -1328,6 +1327,8 @@
             if (!confirm(`'${name}' 기법을 삭제하시겠습니까?`)) return;
 
             window.strategyNames = window.strategyNames.filter(s => s !== name);
+            delete window.strategyDates[name]; // 날짜 메모리도 삭제
+
             if (window.currentActiveStrategy === name) {
                 window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
             }
@@ -1342,11 +1343,17 @@
             if(!confirm("모든 날짜의 장부와 데이터가 초기화됩니다. 진행하시겠습니까?")) return;
             window.dailyDatabase = {};
             window.strategyNames = [];
+            window.strategyDates = {};
             window.currentActiveStrategy = '';
-            document.getElementById('currentDate').value = getTodayStr();
+            
+            const todayStr = getTodayStr();
+            document.getElementById('currentDate').value = todayStr;
+            document.getElementById('currentDateTab1').value = todayStr;
+            
             window.renderDynamicTabs();
             window.renderManageList();
             window.onDateChange();
+            
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
             alert("초기화가 완료되었습니다.");
         };
