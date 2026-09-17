@@ -483,16 +483,17 @@
             document.getElementById('currentStrategyNameDisplay').textContent = window.currentActiveStrategy || "없음";
         };
 
+        // 💡 0으로 초기화되도록 기본값 모델 수정
         function getDefaultStrategyData() {
             return { 
-                baseBudget: 24000, 
+                baseBudget: 0, 
                 io: 0, 
                 realizedProfit: 0,
-                totalSteps: 16, 
-                buyAmount: 1500, 
-                dropRate: 0.25, 
-                basePrice: 100,
-                anchorPrice: 100, 
+                totalSteps: 0, 
+                buyAmount: 0, 
+                dropRate: 0, 
+                basePrice: 0,
+                anchorPrice: 0, 
                 currentStep: 0, 
                 totalQty: 0, 
                 drops: [] 
@@ -555,13 +556,13 @@
 
         function applyDataToForm(data) {
             if (!data) return;
-            document.getElementById('baseBudget').value = data.baseBudget !== undefined ? data.baseBudget : 24000;
+            document.getElementById('baseBudget').value = data.baseBudget !== undefined ? data.baseBudget : 0;
             document.getElementById('dailyIo').value = data.io !== undefined ? data.io : 0;
-            document.getElementById('totalStepsSetting').value = data.totalSteps || 16;
-            document.getElementById('buyAmount').value = data.buyAmount !== undefined ? data.buyAmount : 1500;
-            document.getElementById('dropRate').value = data.dropRate || 0.25;
-            document.getElementById('basePrice').value = data.basePrice || 100;
-            document.getElementById('anchorPrice').value = data.anchorPrice !== undefined ? data.anchorPrice : data.basePrice;
+            document.getElementById('totalStepsSetting').value = data.totalSteps || 0;
+            document.getElementById('buyAmount').value = data.buyAmount !== undefined ? data.buyAmount : 0;
+            document.getElementById('dropRate').value = data.dropRate || 0;
+            document.getElementById('basePrice').value = data.basePrice || 0;
+            document.getElementById('anchorPrice').value = data.anchorPrice !== undefined ? data.anchorPrice : 0;
             document.getElementById('currentStep').value = data.currentStep || 0;
             document.getElementById('totalQty').value = data.totalQty || 0;
             
@@ -609,7 +610,7 @@
             const dateStr = document.getElementById('currentDate').value;
             let stData = window.dailyDatabase[dateStr][window.currentActiveStrategy];
             if (!stData.drops) stData.drops = [];
-            stData.drops.push({ price: stData.anchorPrice || 100, qty: 1, date: dateStr });
+            stData.drops.push({ price: stData.anchorPrice || 0, qty: 1, date: dateStr });
             renderDropRows(stData.drops);
             autoSaveState();
         };
@@ -635,9 +636,9 @@
                 baseBudget: parseFloat(document.getElementById('baseBudget').value) || 0,
                 io: parseFloat(document.getElementById('dailyIo').value) || 0,
                 realizedProfit: existingRealized,
-                totalSteps: parseInt(document.getElementById('totalStepsSetting').value) || 16,
-                buyAmount: parseFloat(document.getElementById('buyAmount').value) || 1500,
-                dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
+                totalSteps: parseInt(document.getElementById('totalStepsSetting').value) || 0,
+                buyAmount: parseFloat(document.getElementById('buyAmount').value) || 0,
+                dropRate: parseFloat(document.getElementById('dropRate').value) || 0,
                 basePrice: parseFloat(document.getElementById('basePrice').value) || 0,
                 anchorPrice: parseFloat(document.getElementById('anchorPrice').value) || 0,
                 currentStep: parseInt(document.getElementById('currentStep').value) || 0,
@@ -664,7 +665,7 @@
             let realizedProfit = currentData.realizedProfit || 0;
 
             const totalBudget = getEffectiveTotalBudget() + realizedProfit;
-            const buyAmountPerStep = parseFloat(document.getElementById('buyAmount').value) || 1500;
+            const buyAmountPerStep = parseFloat(document.getElementById('buyAmount').value) || 0;
             const updownQty = parseInt(document.getElementById('totalQty').value) || 0;
             const currentPrice = parseFloat(document.getElementById('basePrice').value) || 0;
             const anchorPrice = parseFloat(document.getElementById('anchorPrice').value) || currentPrice;
@@ -1306,11 +1307,16 @@
             if (window.strategyNames.includes(name)) return alert("이미 존재하는 기법입니다.");
 
             window.strategyNames.push(name);
-            window.strategyDates[name] = getTodayStr(); 
+            const todayStr = getTodayStr();
+            window.strategyDates[name] = todayStr; // 💡 새 기법 추가 시 날짜를 오늘 날짜로 세팅
 
-            if (window.strategyNames.length === 1) {
-                window.currentActiveStrategy = name;
+            // 💡 새로 추가된 기법의 당일 날짜 데이터베이스에 0으로 채워진 기본값 강제 주입
+            if (!window.dailyDatabase[todayStr]) {
+                window.dailyDatabase[todayStr] = { _meta: { fxRate: 1368.3 } };
             }
+            window.dailyDatabase[todayStr][name] = getDefaultStrategyData();
+
+            window.currentActiveStrategy = name;
 
             document.getElementById('newStrategyName').value = '';
             window.renderDynamicTabs();
@@ -1319,7 +1325,6 @@
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
         };
 
-        // 💡 새롭게 추가된 기법명 변경 기능
         window.renameStrategy = function(oldName) {
             let newName = prompt(`'${oldName}' 기법의 새 이름을 입력하세요:`, oldName);
             if (!newName) return;
