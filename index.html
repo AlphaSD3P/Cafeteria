@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>알고리즘 카페테리아 매매 & 잔고 일별 기록</title>
+    <title>알고리즘 스위치 매매 (업다운 & 떨법) & 잔고 일별 기록</title>
     
     <!-- Firebase SDK (App, Firestore, Auth) 불러오기 -->
     <script type="module">
@@ -68,7 +68,7 @@
 
         async function loadCloudDataAndInit() {
             try {
-                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchMultiNew");
+                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchFinalMaster");
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
@@ -93,7 +93,7 @@
 
         window.saveCloudDataInstant = async function() {
             try {
-                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchMultiNew"), {
+                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchFinalMaster"), {
                     strategies: window.strategies,
                     allData: window.allData,
                     history: window.historyData
@@ -135,7 +135,7 @@
         }
         .google-login-btn:hover { background-color: #f7fafc; }
 
-        #app-screen { display: none; width: 100%; max-width: 1050px; background-color: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 30px; }
+        #app-screen { display: none; width: 100%; max-width: 1100px; background-color: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 30px; }
         .header { text-align: center; margin-bottom: 25px; position: relative; }
         .header h1 { font-size: 24px; margin-bottom: 8px; color: #1a365d; }
         .user-info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #666; background: #f7fafc; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; }
@@ -219,7 +219,7 @@
     </div>
 
     <div class="header">
-        <h1>CAFETERIA DASHBOARD</h1>
+        <h1>스위치 매매법 (업다운 & 떨법) 실전 대시보드</h1>
         <p>클라우드 보안 실시간 동기화 시스템</p>
     </div>
 
@@ -247,8 +247,10 @@
                     basePrice: 77.00,       // 당일 기준 가격(종가)
                     totalSteps: 16,         // 총 회차
                     currentStep: 1,         // 현재 회차
+                    totalQty: 16,           // 누적 보유수량
                     buyAmount: 1500,        // 1기법당 매수금 ($)
-                    dropRate: 0.25          // 하락간격 (%)
+                    dropRate: 0.25,         // 하락간격 (%)
+                    drops: []               // 보유 중인 떨법 물량 리스트 [{price, qty}]
                 }
             }
         ];
@@ -262,7 +264,7 @@
         }, 500);
     }
 
-    // 새로운 업다운 & 떨법 알고리즘 주문 생성 로직 적용
+    // [최신 핵심 로직 반영]: 업다운 + 떨법 자동 주문 생성 및 데이터 저장
     window.generateAlgoOrders = function(stratId) {
         let dateEl = document.getElementById(`date-${stratId}`);
         let multEl = document.getElementById(`mult-${stratId}`);
@@ -270,69 +272,120 @@
         let dateVal = dateEl.value;
         let mult = multEl ? (parseFloat(multEl.value) || 1) : 1;
 
-        // 입력값 가져오기
         let basePrice = parseFloat(document.getElementById(`algo-base-${stratId}`).value) || 77.00;
         let totalSteps = parseInt(document.getElementById(`algo-steps-${stratId}`).value) || 16;
         let currentStep = parseInt(document.getElementById(`algo-round-${stratId}`).value) || 1;
+        let totalQty = parseInt(document.getElementById(`algo-totalqty-${stratId}`).value) || 16;
         let buyAmount = parseFloat(document.getElementById(`algo-buyamt-${stratId}`).value) || 1500;
         let dropRate = parseFloat(document.getElementById(`algo-drop-${stratId}`).value) || 0.25;
 
-        // 전략 객체에 백업
+        // 떨법 보유 물량 수집
+        let dropHoldings = [];
+        let dropRows = document.querySelectorAll(`.drop-row-${stratId}`);
+        dropRows.forEach(row => {
+            let p = parseFloat(row.querySelector('.drop-price').value);
+            let q = parseInt(row.querySelector('.drop-qty').value);
+            if(!isNaN(p) && !isNaN(q) && q > 0) {
+                dropHoldings.push({price: p, qty: q});
+            }
+        });
+
         let strat = window.strategies.find(s => s.id === stratId);
         if(strat) {
             strat.defaultMult = mult;
-            strat.algo = { basePrice, totalSteps, currentStep, buyAmount, dropRate };
+            strat.algo = { basePrice, totalSteps, currentStep, totalQty, buyAmount, dropRate, drops: dropHoldings };
         }
 
         let buys = [];
         let limitPrice = basePrice * 0.80;
+        let merged = new Map();
 
-        // 1. 떨법 매수 주문 생성 (떨법 기본진입 + 추가방어)
+        function addOrder(type, label, p, q) {
+            buys.push({
+                category: type === 'A' ? 'drop' : 'updown',
+                label: label,
+                price: parseFloat(p.toFixed(2)),
+                qty: q
+            });
+
+            let key = p.toFixed(2);
+            if (!merged.has(key)) {
+                merged.set(key, { price: parseFloat(key), qtyA: 0, qtyB: 0, labelA: '', labelB: '' });
+            }
+            let entry = merged.get(key);
+            if (type === 'A') {
+                entry.qtyA += q;
+                entry.labelA = label;
+            } else {
+                entry.qtyB += q;
+                entry.labelB = label;
+            }
+        }
+
+        // 1. 떨법 매수 주문 생성
         let pA = basePrice - 0.01;
         let qA = Math.floor(buyAmount / pA);
         if (pA >= limitPrice) {
-            buys.push({ price: pA.toFixed(2), qty: qA, label: '떨법 기본진입' });
+            addOrder('A', '떨법 기본진입', pA, qA);
             let nA = qA + 1;
             while (true) {
                 let p = buyAmount / nA;
                 if (p < limitPrice || nA > 10000) break;
-                if (p < pA) buys.push({ price: p.toFixed(2), qty: 1, label: '떨법 추가방어' });
+                if (p < pA) addOrder('A', '떨법 추가방어', p, 1);
                 nA++;
             }
         }
 
-        // 2. 업다운 매수 주문 생성 (업다운 확정진입/기본진입 + 추가방어)
+        // 2. 업다운 매수 주문 생성
         let pB = (currentStep === 0) ? (basePrice * 1.10) : (basePrice * (1 - (dropRate * currentStep) / 100));
         let qB = Math.floor(buyAmount / pB);
         if (pB >= limitPrice) {
             let labelB = (currentStep === 0) ? `업다운 확정진입(0->1회차)` : `업다운 기본진입(${currentStep}->${currentStep+1}회차)`;
-            buys.push({ price: pB.toFixed(2), qty: qB, label: labelB });
+            addOrder('B', labelB, pB, qB);
             let nB = qB + 1;
             while (true) {
                 let p = buyAmount / nB;
                 if (p < limitPrice || nB > 10000) break;
-                if (p < pB) buys.push({ price: p.toFixed(2), qty: 1, label: '업다운 추가방어' });
+                if (p < pB) addOrder('B', '업다운 추가방어', p, 1);
                 nB++;
             }
         }
 
-        // 3. 매도 주문 생성 (업다운 복귀용 + 떨법 본절용)
+        // 병합된 매수 주문 리스트 정리
+        let finalBuys = [];
+        merged.forEach((val) => {
+            let totalQ = val.qtyA + val.qtyB;
+            let label = '';
+            if (val.qtyA > 0 && val.qtyB > 0) label = `합동 방어 (떨법 ${val.qtyA} + 업다운 ${val.qtyB})`;
+            else if (val.qtyA > 0) label = val.labelA;
+            else label = val.labelB;
+
+            finalBuys.push({ price: val.price, qty: totalQ, label: label });
+        });
+        finalBuys.sort((a, b) => b.price - a.price);
+
+        // 3. 매도 주문 생성 (업다운 복귀용 + 떨법 보유 물량 본절 지정가)
         let sells = [];
-        let totalQtyInput = parseInt(document.getElementById(`algo-totalqty-${stratId}`).value) || 16;
         if (currentStep > 0) {
-            let sellQty = Math.floor(totalQtyInput / currentStep);
+            let sellQty = Math.floor(totalQty / currentStep);
             if (sellQty > 0) {
-                sells.push({ price: basePrice.toFixed(2), qty: sellQty, label: `업다운 (${currentStep - 1}회차 복귀용)` });
+                sells.push({ price: parseFloat(basePrice.toFixed(2)), qty: sellQty, label: `업다운 (${currentStep - 1}회차 복귀용)`, rate: '당일 종가 (0.00%)' });
             }
         }
 
+        let dropCount = 1;
+        dropHoldings.forEach(d => {
+            sells.push({ price: d.price, qty: d.qty, label: `떨법 보유물량 ${dropCount}`, rate: '지정가 (본절)' });
+            dropCount++;
+        });
+
         // 데이터 저장
         if(!window.allData[dateVal]) window.allData[dateVal] = {};
-        window.allData[dateVal][stratId] = { mult: mult, buys: buys, sells: sells, totalQty: totalQtyInput };
+        window.allData[dateVal][stratId] = { mult: mult, buys: finalBuys, sells: sells, totalQty: totalQty, drops: dropHoldings };
 
         saveData();
         loadDataForDate(stratId);
-        alert(`[${strat.name}] 새로운 알고리즘 주문이 성공적으로 생성되었습니다!`);
+        alert(`[${strat.name}] 최신 업다운 & 떨법 알고리즘 주문이 성공적으로 생성되었습니다!`);
     };
 
     window.initAppUI = function() {
@@ -345,9 +398,7 @@
         window.strategies.forEach((strat, index) => {
             tabBtns.innerHTML += `<button class="tab-btn ${index === 0 ? 'active' : ''}" onclick="switchTab(${index})">${strat.name}</button>`;
 
-            let algo = strat.algo || { basePrice: 77.00, totalSteps: 16, currentStep: 1, buyAmount: 1500, dropRate: 0.25 };
-            let savedDayData = window.allData[document.getElementById(`date-${strat.id}`)?._lastDate] || {};
-            let currentQtyVal = savedDayData[strat.id]?.totalQty || 16;
+            let algo = strat.algo || { basePrice: 77.00, totalSteps: 16, currentStep: 1, totalQty: 16, buyAmount: 1500, dropRate: 0.25, drops: [] };
 
             tabContents.innerHTML += `
                 <div class="tab-content ${index === 0 ? 'active' : ''}" id="content-${index}">
@@ -369,19 +420,26 @@
                             <div><label>당일 기준가격(종가)</label><input type="number" step="0.01" id="algo-base-${strat.id}" value="${algo.basePrice}"></div>
                             <div><label>총 회차 선택</label><input type="number" id="algo-steps-${strat.id}" value="${algo.totalSteps}"></div>
                             <div><label>현재 회차</label><input type="number" id="algo-round-${strat.id}" value="${algo.currentStep}"></div>
+                            <div><label>누적 보유수량</label><input type="number" id="algo-totalqty-${strat.id}" value="${algo.totalQty}"></div>
                             <div><label>1기법당 매수금($)</label><input type="number" id="algo-buyamt-${strat.id}" value="${algo.buyAmount}"></div>
-                            <div><label>누적 보유수량</label><input type="number" id="algo-totalqty-${strat.id}" value="${currentQtyVal}"></div>
                             <div><label>하락간격(%)</label><input type="number" step="0.01" id="algo-drop-${strat.id}" value="${algo.dropRate}"></div>
                         </div>
+                        
+                        <div style="margin-top: 10px; background: #fff; padding: 12px; border: 1px solid #cbd5e0; border-radius: 6px;">
+                            <div style="font-weight: bold; color: #9333ea; margin-bottom: 8px; font-size: 13px;">■ 현재 보유 중인 떨법 물량 관리</div>
+                            <div id="drop-container-${strat.id}"></div>
+                            <button class="execute-btn" onclick="addDropRow('${strat.id}')" style="background-color:#f1f5f9; color:#3b82f6; border:1px dashed #cbd5e0; padding:6px; font-size:12px; margin-top:5px;">+ 떨법 물량 추가</button>
+                        </div>
+
                         <div style="text-align:right; margin-top:8px;">
                             <button class="execute-btn" onclick="generateAlgoOrders('${strat.id}')" style="margin-top:0; padding:10px 20px; background-color:#38a169; width:auto; display:inline-block;">⚡ 알고리즘 주문 자동 생성</button>
                         </div>
                     </div>
 
-                    <div class="section-title title-buy">새로운 업다운 & 떨법 매수 주문 (LOC) 미리보기</div>
+                    <div class="section-title title-buy">생성된 매수 주문 (LOC) 미리보기</div>
                     <div id="buy-preview-${strat.id}"></div>
 
-                    <div class="section-title title-sell">매도 주문 (LOC) 미리보기</div>
+                    <div class="section-title title-sell">생성된 매도 주문 (LOC) 미리보기</div>
                     <div id="sell-preview-${strat.id}"></div>
                     
                     <div style="margin-top: 15px;">
@@ -491,6 +549,22 @@
         if (index === resIdx) calculateTotalNet();
     };
 
+    window.addDropRow = function(stratId, p = '', q = '') {
+        const container = document.getElementById(`drop-container-${stratId}`);
+        if(!container) return;
+        const row = document.createElement('div');
+        row.className = `drop-row-${stratId}`;
+        row.style.display = 'flex';
+        row.style.gap = '8px';
+        row.style.marginBottom = '6px';
+        row.innerHTML = `
+            <input type="number" step="0.01" class="drop-price" placeholder="매수가($)" value="${p}" style="flex:1; padding:4px; text-align:right;">
+            <input type="number" class="drop-qty" placeholder="수량" value="${q}" style="flex:1; padding:4px; text-align:right;">
+            <button onclick="this.parentElement.remove()" style="background:#e53e3e; color:white; border:none; padding:2px 8px; border-radius:4px; cursor:pointer;">X</button>
+        `;
+        container.appendChild(row);
+    };
+
     function loadDataForDate(stratIdTarget) {
         window.strategies.forEach(strat => {
             if(stratIdTarget && strat.id !== stratIdTarget) return;
@@ -505,7 +579,25 @@
             if(buyPreview) buyPreview.innerHTML = '';
             if(sellPreview) sellPreview.innerHTML = '';
 
+            // 입력값 UI 반영용 객체 가져오기
             let dayData = window.allData[dateVal] && window.allData[dateVal][strat.id] ? window.allData[dateVal][strat.id] : null;
+            let algo = strat.algo || { basePrice: 77.00, totalSteps: 16, currentStep: 1, totalQty: 16, buyAmount: 1500, dropRate: 0.25, drops: [] };
+
+            if(document.getElementById(`algo-base-${strat.id}`)) document.getElementById(`algo-base-${strat.id}`).value = algo.basePrice;
+            if(document.getElementById(`algo-steps-${strat.id}`)) document.getElementById(`algo-steps-${strat.id}`).value = algo.totalSteps;
+            if(document.getElementById(`algo-round-${strat.id}`)) document.getElementById(`algo-round-${strat.id}`).value = algo.currentStep;
+            if(document.getElementById(`algo-totalqty-${strat.id}`)) document.getElementById(`algo-totalqty-${strat.id}`).value = algo.totalQty;
+            if(document.getElementById(`algo-buyamt-${strat.id}`)) document.getElementById(`algo-buyamt-${strat.id}`).value = algo.buyAmount;
+            if(document.getElementById(`algo-drop-${strat.id}`)) document.getElementById(`algo-drop-${strat.id}`).value = algo.dropRate;
+
+            // 떨법 목록 렌더링
+            let dropContainer = document.getElementById(`drop-container-${strat.id}`);
+            if(dropContainer) {
+                dropContainer.innerHTML = '';
+                let dropsToRender = algo.drops || [];
+                if(dayData && dayData.drops) dropsToRender = dayData.drops;
+                dropsToRender.forEach(d => window.addDropRow(strat.id, d.price, d.qty));
+            }
 
             if (dayData) {
                 if(multEl && dayData.mult) multEl.value = dayData.mult;
@@ -513,8 +605,7 @@
                 let buysHtml = '';
                 if(dayData.buys && dayData.buys.length > 0) {
                     dayData.buys.forEach((b) => {
-                        let labelTxt = b.label || '매수';
-                        buysHtml += `<div class="order-card row-white"><span><span class="dot dot-buy"></span><b style="color:#e53e3e;">${labelTxt} ($${b.price})</b></span><b style="color:#e53e3e;">${b.qty}주</b></div>`;
+                        buysHtml += `<div class="order-card row-white"><span><span class="dot dot-buy"></span><b style="color:#e53e3e;">${b.label || '매수'} ($${b.price})</b></span><b style="color:#e53e3e;">${b.qty}주</b></div>`;
                     });
                 } else {
                     buysHtml = '<div class="empty-slot">생성된 매수 주문이 없습니다.</div>';
@@ -524,8 +615,7 @@
                 let sellsHtml = '';
                 if(dayData.sells && dayData.sells.length > 0) {
                     dayData.sells.forEach((s) => {
-                        let labelTxt = s.label || '매도';
-                        sellsHtml += `<div class="order-card row-white"><span><span class="dot dot-sell"></span><b style="color:#3182ce;">${labelTxt} ($${s.price})</b></span><b style="color:#3182ce;">${s.qty}주</b></div>`;
+                        sellsHtml += `<div class="order-card row-white"><span><span class="dot dot-sell"></span><b style="color:#3182ce;">${s.label || '매도'} ($${s.price})</b></span><b style="color:#3182ce;">${s.qty}주</b></div>`;
                     });
                 } else {
                     sellsHtml = '<div class="empty-slot">생성된 매도 주문이 없습니다.</div>';
@@ -585,7 +675,7 @@
             defaultShares: 0, 
             defaultAvg: 0, 
             defaultInit: 50000,
-            algo: { basePrice: 77.00, totalSteps: 16, currentStep: 1, buyAmount: 1500, dropRate: 0.25 }
+            algo: { basePrice: 77.00, totalSteps: 16, currentStep: 1, totalQty: 16, buyAmount: 1500, dropRate: 0.25, drops: [] }
         });
         await window.saveCloudDataInstant();
         location.reload();
@@ -705,7 +795,7 @@
         if (!hasValidInput) { resultBox.style.display = 'none'; return; }
 
         rawBuys.sort((a, b) => b - a);
-        rawSells.sort((a, b) => a - b);
+        rawSells.sort((a, b) => b - a);
         let netOrders = { 'buy': {}, 'sell': {} };
         function addNet(type, price, qty) {
             netOrders[type][price.toFixed(2)] = (netOrders[type][price.toFixed(2)] || 0) + qty;
