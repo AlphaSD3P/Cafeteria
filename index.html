@@ -68,7 +68,7 @@
 
         async function loadCloudDataAndInit() {
             try {
-                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchMulti");
+                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchMultiNew");
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
@@ -93,7 +93,7 @@
 
         window.saveCloudDataInstant = async function() {
             try {
-                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchMulti"), {
+                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchMultiNew"), {
                     strategies: window.strategies,
                     allData: window.allData,
                     history: window.historyData
@@ -135,7 +135,7 @@
         }
         .google-login-btn:hover { background-color: #f7fafc; }
 
-        #app-screen { display: none; width: 100%; max-width: 980px; background-color: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 30px; }
+        #app-screen { display: none; width: 100%; max-width: 1050px; background-color: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 30px; }
         .header { text-align: center; margin-bottom: 25px; position: relative; }
         .header h1 { font-size: 24px; margin-bottom: 8px; color: #1a365d; }
         .user-info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #666; background: #f7fafc; padding: 8px 12px; border-radius: 6px; margin-bottom: 15px; }
@@ -244,11 +244,11 @@
                 defaultAvg: 0, 
                 defaultInit: 50000,
                 algo: {
-                    basePrice: 90.00,       // 전날 종가
-                    totalRounds: 16,        // 전체 회차
-                    currentRound: 1,        // 진행 회차
-                    buyCash: 1500,          // 1회 매수금 ($)
-                    dropStep: 0.25          // 하락간격 (%)
+                    basePrice: 77.00,       // 당일 기준 가격(종가)
+                    totalSteps: 16,         // 총 회차
+                    currentStep: 1,         // 현재 회차
+                    buyAmount: 1500,        // 1기법당 매수금 ($)
+                    dropRate: 0.25          // 하락간격 (%)
                 }
             }
         ];
@@ -262,7 +262,7 @@
         }, 500);
     }
 
-    // 업다운 & 떨법 결합 알고리즘 주문 자동 생성 함수
+    // 새로운 업다운 & 떨법 알고리즘 주문 생성 로직 적용
     window.generateAlgoOrders = function(stratId) {
         let dateEl = document.getElementById(`date-${stratId}`);
         let multEl = document.getElementById(`mult-${stratId}`);
@@ -271,44 +271,68 @@
         let mult = multEl ? (parseFloat(multEl.value) || 1) : 1;
 
         // 입력값 가져오기
-        let basePrice = parseFloat(document.getElementById(`algo-base-${stratId}`).value) || 90.00;
-        let totalRounds = parseInt(document.getElementById(`algo-totalrounds-${stratId}`).value) || 16;
-        let currentRound = parseInt(document.getElementById(`algo-round-${stratId}`).value) || 1;
-        let buyCash = parseFloat(document.getElementById(`algo-buycash-${stratId}`).value) || 1500;
-        let dropStep = parseFloat(document.getElementById(`algo-drop-${stratId}`).value) || 0.25;
+        let basePrice = parseFloat(document.getElementById(`algo-base-${stratId}`).value) || 77.00;
+        let totalSteps = parseInt(document.getElementById(`algo-steps-${stratId}`).value) || 16;
+        let currentStep = parseInt(document.getElementById(`algo-round-${stratId}`).value) || 1;
+        let buyAmount = parseFloat(document.getElementById(`algo-buyamt-${stratId}`).value) || 1500;
+        let dropRate = parseFloat(document.getElementById(`algo-drop-${stratId}`).value) || 0.25;
 
         // 전략 객체에 백업
         let strat = window.strategies.find(s => s.id === stratId);
         if(strat) {
             strat.defaultMult = mult;
-            strat.algo = { basePrice, totalRounds, currentRound, buyCash, dropStep };
+            strat.algo = { basePrice, totalSteps, currentStep, buyAmount, dropRate };
         }
 
         let buys = [];
-        let updownBuyQty = Math.floor(buyCash / basePrice);
-        
-        // 업다운 매수 주문 생성
-        for (let i = 1; i <= totalRounds; i++) {
-            let p = basePrice * (1 - (dropStep * i) / 100);
-            buys.push({ price: p.toFixed(2), qty: updownBuyQty });
+        let limitPrice = basePrice * 0.80;
+
+        // 1. 떨법 매수 주문 생성 (떨법 기본진입 + 추가방어)
+        let pA = basePrice - 0.01;
+        let qA = Math.floor(buyAmount / pA);
+        if (pA >= limitPrice) {
+            buys.push({ price: pA.toFixed(2), qty: qA, label: '떨법 기본진입' });
+            let nA = qA + 1;
+            while (true) {
+                let p = buyAmount / nA;
+                if (p < limitPrice || nA > 10000) break;
+                if (p < pA) buys.push({ price: p.toFixed(2), qty: 1, label: '떨법 추가방어' });
+                nA++;
+            }
         }
 
-        // 업다운 매도 주문 생성
-        let sells = [];
-        let updownSellQtyPerRound = Math.max(1, Math.floor(updownBuyQty / Math.max(1, currentRound)));
-        sells.push({ price: basePrice.toFixed(2), qty: updownSellQtyPerRound, isMoc: false });
+        // 2. 업다운 매수 주문 생성 (업다운 확정진입/기본진입 + 추가방어)
+        let pB = (currentStep === 0) ? (basePrice * 1.10) : (basePrice * (1 - (dropRate * currentStep) / 100));
+        let qB = Math.floor(buyAmount / pB);
+        if (pB >= limitPrice) {
+            let labelB = (currentStep === 0) ? `업다운 확정진입(0->1회차)` : `업다운 기본진입(${currentStep}->${currentStep+1}회차)`;
+            buys.push({ price: pB.toFixed(2), qty: qB, label: labelB });
+            let nB = qB + 1;
+            while (true) {
+                let p = buyAmount / nB;
+                if (p < limitPrice || nB > 10000) break;
+                if (p < pB) buys.push({ price: p.toFixed(2), qty: 1, label: '업다운 추가방어' });
+                nB++;
+            }
+        }
 
-        // 떨법 매수 & 매도 추가
-        buys.push({ price: basePrice.toFixed(2), qty: updownBuyQty });
-        sells.push({ price: basePrice.toFixed(2), qty: updownBuyQty, isMoc: false });
+        // 3. 매도 주문 생성 (업다운 복귀용 + 떨법 본절용)
+        let sells = [];
+        let totalQtyInput = parseInt(document.getElementById(`algo-totalqty-${stratId}`).value) || 16;
+        if (currentStep > 0) {
+            let sellQty = Math.floor(totalQtyInput / currentStep);
+            if (sellQty > 0) {
+                sells.push({ price: basePrice.toFixed(2), qty: sellQty, label: `업다운 (${currentStep - 1}회차 복귀용)` });
+            }
+        }
 
         // 데이터 저장
         if(!window.allData[dateVal]) window.allData[dateVal] = {};
-        window.allData[dateVal][stratId] = { mult: mult, buys: buys, sells: sells };
+        window.allData[dateVal][stratId] = { mult: mult, buys: buys, sells: sells, totalQty: totalQtyInput };
 
         saveData();
         loadDataForDate(stratId);
-        alert(`[${strat.name}] 업다운 & 떨법 알고리즘 주문이 성공적으로 생성되었습니다!`);
+        alert(`[${strat.name}] 새로운 알고리즘 주문이 성공적으로 생성되었습니다!`);
     };
 
     window.initAppUI = function() {
@@ -321,7 +345,9 @@
         window.strategies.forEach((strat, index) => {
             tabBtns.innerHTML += `<button class="tab-btn ${index === 0 ? 'active' : ''}" onclick="switchTab(${index})">${strat.name}</button>`;
 
-            let algo = strat.algo || { basePrice: 90.00, totalRounds: 16, currentRound: 1, buyCash: 1500, dropStep: 0.25 };
+            let algo = strat.algo || { basePrice: 77.00, totalSteps: 16, currentStep: 1, buyAmount: 1500, dropRate: 0.25 };
+            let savedDayData = window.allData[document.getElementById(`date-${strat.id}`)?._lastDate] || {};
+            let currentQtyVal = savedDayData[strat.id]?.totalQty || 16;
 
             tabContents.innerHTML += `
                 <div class="tab-content ${index === 0 ? 'active' : ''}" id="content-${index}">
@@ -340,21 +366,22 @@
                         <hr style="border:0; border-top:1px solid #e2e8f0; margin:5px 0;">
                         <div style="font-size:14px; font-weight:bold; color:#1a365d; margin-bottom:5px;">⚡ 업다운 & 떨법 매매 기법 설정 (${strat.name})</div>
                         <div class="control-row">
-                            <div><label>전날 종가($)</label><input type="number" step="0.01" id="algo-base-${strat.id}" value="${algo.basePrice}"></div>
-                            <div><label>전체 회차</label><input type="number" id="algo-totalrounds-${strat.id}" value="${algo.totalRounds}"></div>
-                            <div><label>진행 회차</label><input type="number" id="algo-round-${strat.id}" value="${algo.currentRound}"></div>
-                            <div><label>1회 매수금($)</label><input type="number" id="algo-buycash-${strat.id}" value="${algo.buyCash}"></div>
-                            <div><label>하락간격(%)</label><input type="number" step="0.01" id="algo-drop-${strat.id}" value="${algo.dropStep}"></div>
+                            <div><label>당일 기준가격(종가)</label><input type="number" step="0.01" id="algo-base-${strat.id}" value="${algo.basePrice}"></div>
+                            <div><label>총 회차 선택</label><input type="number" id="algo-steps-${strat.id}" value="${algo.totalSteps}"></div>
+                            <div><label>현재 회차</label><input type="number" id="algo-round-${strat.id}" value="${algo.currentStep}"></div>
+                            <div><label>1기법당 매수금($)</label><input type="number" id="algo-buyamt-${strat.id}" value="${algo.buyAmount}"></div>
+                            <div><label>누적 보유수량</label><input type="number" id="algo-totalqty-${strat.id}" value="${currentQtyVal}"></div>
+                            <div><label>하락간격(%)</label><input type="number" step="0.01" id="algo-drop-${strat.id}" value="${algo.dropRate}"></div>
                         </div>
                         <div style="text-align:right; margin-top:8px;">
                             <button class="execute-btn" onclick="generateAlgoOrders('${strat.id}')" style="margin-top:0; padding:10px 20px; background-color:#38a169; width:auto; display:inline-block;">⚡ 알고리즘 주문 자동 생성</button>
                         </div>
                     </div>
 
-                    <div class="section-title title-buy">업다운 & 떨법 매수 주문 (LOC) 미리보기</div>
+                    <div class="section-title title-buy">새로운 업다운 & 떨법 매수 주문 (LOC) 미리보기</div>
                     <div id="buy-preview-${strat.id}"></div>
 
-                    <div class="section-title title-sell">업다운 & 떨법 매도 시도 (어제 종가 기준)</div>
+                    <div class="section-title title-sell">매도 주문 (LOC) 미리보기</div>
                     <div id="sell-preview-${strat.id}"></div>
                     
                     <div style="margin-top: 15px;">
@@ -399,7 +426,7 @@
                 <div class="control-box" style="justify-content: space-between; margin-bottom: 15px; flex-direction:row; flex-wrap: wrap;">
                     <div><label>📅 기록 날짜</label><input type="date" id="record-date" onchange="updateBalanceLive()" style="width:130px; margin-left:5px;"></div>
                     <div style="display:flex; gap:15px; align-items:center;">
-                        <div><label>💵 당일 종가($)</label><input type="number" step="0.01" id="record-close-price" value="90.00" oninput="updateBalanceLive()" style="width:80px; margin-left:5px;"></div>
+                        <div><label>💵 당일 종가($)</label><input type="number" step="0.01" id="record-close-price" value="77.00" oninput="updateBalanceLive()" style="width:80px; margin-left:5px;"></div>
                         <div><label>💱 환율(원/달러)</label><input type="number" step="0.01" id="record-exchange-rate" value="1350.00" oninput="updateBalanceLive()" style="width:90px; margin-left:5px;"></div>
                     </div>
                 </div>
@@ -485,8 +512,9 @@
                 
                 let buysHtml = '';
                 if(dayData.buys && dayData.buys.length > 0) {
-                    dayData.buys.forEach((b, idx) => {
-                        buysHtml += `<div class="order-card row-white"><span><span class="dot dot-buy"></span><b style="color:#e53e3e;">매수·LOC #${idx+1} ($${b.price})</b></span><b style="color:#e53e3e;">${b.qty}주</b></div>`;
+                    dayData.buys.forEach((b) => {
+                        let labelTxt = b.label || '매수';
+                        buysHtml += `<div class="order-card row-white"><span><span class="dot dot-buy"></span><b style="color:#e53e3e;">${labelTxt} ($${b.price})</b></span><b style="color:#e53e3e;">${b.qty}주</b></div>`;
                     });
                 } else {
                     buysHtml = '<div class="empty-slot">생성된 매수 주문이 없습니다.</div>';
@@ -495,9 +523,9 @@
 
                 let sellsHtml = '';
                 if(dayData.sells && dayData.sells.length > 0) {
-                    dayData.sells.forEach((s, idx) => {
-                        let txt = `매도·LOC ($${s.price})`;
-                        sellsHtml += `<div class="order-card row-white"><span><span class="dot dot-sell"></span><b style="color:#3182ce;">${txt}</b></span><b style="color:#3182ce;">${s.qty}주</b></div>`;
+                    dayData.sells.forEach((s) => {
+                        let labelTxt = s.label || '매도';
+                        sellsHtml += `<div class="order-card row-white"><span><span class="dot dot-sell"></span><b style="color:#3182ce;">${labelTxt} ($${s.price})</b></span><b style="color:#3182ce;">${s.qty}주</b></div>`;
                     });
                 } else {
                     sellsHtml = '<div class="empty-slot">생성된 매도 주문이 없습니다.</div>';
@@ -557,7 +585,7 @@
             defaultShares: 0, 
             defaultAvg: 0, 
             defaultInit: 50000,
-            algo: { basePrice: 90.00, totalRounds: 16, currentRound: 1, buyCash: 1500, dropStep: 0.25 }
+            algo: { basePrice: 77.00, totalSteps: 16, currentStep: 1, buyAmount: 1500, dropRate: 0.25 }
         });
         await window.saveCloudDataInstant();
         location.reload();
