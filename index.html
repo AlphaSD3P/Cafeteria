@@ -259,7 +259,7 @@
                     </div>
                     <div class="input-group">
                         <label>💰 기준 운용금액($)</label>
-                        <input type="number" id="baseBudget" value="24000" oninput="autoSaveState()">
+                        <input type="number" id="baseBudget" value="0" oninput="autoSaveState()">
                     </div>
                     <div class="input-group">
                         <label style="color:#1d4ed8;">💵 현재 총 자산($)</label>
@@ -271,15 +271,15 @@
                     </div>
                     <div class="input-group">
                         <label>🔢 총 회차 선택</label>
-                        <input type="number" id="totalStepsSetting" value="16" oninput="autoSaveState()">
+                        <input type="number" id="totalStepsSetting" value="0" oninput="autoSaveState()">
                     </div>
                     <div class="input-group">
                         <label>🔒 1기법당 매수금($)</label>
-                        <input type="number" id="buyAmount" value="1500" oninput="autoSaveState()" style="background:#fffbeb; font-weight:bold; color:#b45309;">
+                        <input type="number" id="buyAmount" value="0" oninput="autoSaveState()" style="background:#fffbeb; font-weight:bold; color:#b45309;">
                     </div>
                     <div class="input-group">
                         <label>📉 하락간격(%)</label>
-                        <input type="number" id="dropRate" step="0.01" value="0.25" oninput="autoSaveState()">
+                        <input type="number" id="dropRate" step="0.01" value="0" oninput="autoSaveState()">
                     </div>
                 </div>
 
@@ -322,11 +322,11 @@
                         <div class="card-title"><span style="color:#ea580c">■ 업다운 상태 입력</span></div>
                         <div class="input-group">
                             <label>당일 기준 가격 (오늘 종가)</label>
-                            <input type="number" id="basePrice" step="0.01" value="100.00" oninput="autoSaveState()" style="font-weight:bold; color:#1e3a8a; background:#eff6ff;">
+                            <input type="number" id="basePrice" step="0.01" value="0" oninput="autoSaveState()" style="font-weight:bold; color:#1e3a8a; background:#eff6ff;">
                         </div>
                         <div class="input-group">
                             <label style="color:#b45309;">📌 업다운 기준가격 (직전 체결가 고정)</label>
-                            <input type="number" id="anchorPrice" step="0.01" value="100.00" oninput="autoSaveState()" style="font-weight:bold; color:#b45309; background:#fffbeb;">
+                            <input type="number" id="anchorPrice" step="0.01" value="0" oninput="autoSaveState()" style="font-weight:bold; color:#b45309; background:#fffbeb;">
                         </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                             <div class="input-group">
@@ -430,7 +430,7 @@
 
     <script>
         window.dailyDatabase = {};
-        window.strategyNames = ['스', '윙', '장', '투'];
+        window.strategyNames = []; // 💡 초기 기법 목록 빈 배열로 설정
         window.currentActiveStrategy = '';
         window.strategyDates = {}; 
         window.isFilterDateOnly = false;
@@ -460,6 +460,10 @@
             if (!window.strategyNames || window.strategyNames.length === 0) {
                 container.innerHTML = '<div style="color:#94a3b8; font-size:13px; text-align:center; width:100%;">등록된 매매기법이 없습니다. [기법 관리] 탭에서 기법을 추가하세요.</div>';
                 document.getElementById('currentStrategyNameDisplay').textContent = "없음";
+                
+                // 💡 기법이 없을 때 폼 및 대시보드 0으로 강제 클리어
+                applyDataToForm(getDefaultStrategyData());
+                updateSummaryDashboard(true);
                 return;
             }
 
@@ -483,7 +487,6 @@
             document.getElementById('currentStrategyNameDisplay').textContent = window.currentActiveStrategy || "없음";
         };
 
-        // 💡 0으로 초기화되도록 기본값 모델 수정
         function getDefaultStrategyData() {
             return { 
                 baseBudget: 0, 
@@ -502,11 +505,9 @@
 
         window.onDateChange = function() {
             const dateStr = document.getElementById('currentDate').value;
-            if (!dateStr) return;
+            if (!dateStr || !window.currentActiveStrategy) return;
             
-            if (window.currentActiveStrategy) {
-                window.strategyDates[window.currentActiveStrategy] = dateStr;
-            }
+            window.strategyDates[window.currentActiveStrategy] = dateStr;
 
             if (!window.dailyDatabase[dateStr]) {
                 let sortedDates = Object.keys(window.dailyDatabase).sort();
@@ -555,7 +556,7 @@
         };
 
         function applyDataToForm(data) {
-            if (!data) return;
+            if (!data) data = getDefaultStrategyData();
             document.getElementById('baseBudget').value = data.baseBudget !== undefined ? data.baseBudget : 0;
             document.getElementById('dailyIo').value = data.io !== undefined ? data.io : 0;
             document.getElementById('totalStepsSetting').value = data.totalSteps || 0;
@@ -629,8 +630,12 @@
             if (!dateStr || !window.currentActiveStrategy) return;
 
             let drops = getDropsFromScreen();
-            let existingRealized = window.dailyDatabase[dateStr][window.currentActiveStrategy] ? 
+            let existingRealized = window.dailyDatabase[dateStr] && window.dailyDatabase[dateStr][window.currentActiveStrategy] ? 
                                    (window.dailyDatabase[dateStr][window.currentActiveStrategy].realizedProfit || 0) : 0;
+
+            if (!window.dailyDatabase[dateStr]) {
+                window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 } };
+            }
 
             window.dailyDatabase[dateStr][window.currentActiveStrategy] = {
                 baseBudget: parseFloat(document.getElementById('baseBudget').value) || 0,
@@ -657,9 +662,24 @@
             return baseBudget + ioAmount;
         }
 
-        function updateSummaryDashboard() {
+        function updateSummaryDashboard(forceClear = false) {
+            if (forceClear || !window.currentActiveStrategy || window.strategyNames.length === 0) {
+                document.getElementById('totalAssetSum').value = "0.00 $";
+                document.getElementById('remainingCash').value = "0.00 $";
+                document.getElementById('remainingSteps').value = "0.0 회차";
+                document.getElementById('totalHoldingCount').value = "0 주";
+                document.getElementById('averagePrice').value = "-";
+                document.getElementById('totalProfitLoss').value = "0.00 $";
+                document.getElementById('totalProfitLoss').style.color = "#334155";
+                document.getElementById('totalReturnRate').value = "0.00 %";
+                document.getElementById('totalReturnRate').style.color = "#334155";
+                return { remainingCash: 0, remainingSteps: 0, totalAsset: 0, realizedProfit: 0 };
+            }
+
             const dateStr = document.getElementById('currentDate').value;
-            if(!window.dailyDatabase[dateStr] || !window.currentActiveStrategy) return;
+            if(!window.dailyDatabase[dateStr] || !window.dailyDatabase[dateStr][window.currentActiveStrategy]) {
+                return { remainingCash: 0, remainingSteps: 0, totalAsset: 0, realizedProfit: 0 };
+            }
             
             let currentData = window.dailyDatabase[dateStr][window.currentActiveStrategy] || {};
             let realizedProfit = currentData.realizedProfit || 0;
@@ -731,7 +751,9 @@
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
 
-            if(isNaN(basePrice) || isNaN(anchorPrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty)) {
+            if(isNaN(basePrice) || isNaN(anchorPrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
+                document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
+                document.getElementById('sellResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
                 return;
             }
 
@@ -998,6 +1020,10 @@
             let baseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
             let currentEffectiveBudget = baseBudgetVal + currentIo + realizedProfitAdd;
 
+            if(!window.dailyDatabase[currentDateStr]) {
+                window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
+            }
+
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
                 baseBudget: baseBudgetVal,
                 io: currentIo,
@@ -1217,7 +1243,6 @@
                     tEvalUsd += evalVal;
                     tProfitUsd += (profit + realized);
 
-                    let avgP = hQty > 0 ? cost / hQty : 0;
                     bullets += `<li><b>${st}</b>: ${hQty}주 (종가 $${strategyClose.toFixed(2)}, 총합 $${evalVal.toFixed(2)})</li>`;
                 });
 
@@ -1308,9 +1333,8 @@
 
             window.strategyNames.push(name);
             const todayStr = getTodayStr();
-            window.strategyDates[name] = todayStr; // 💡 새 기법 추가 시 날짜를 오늘 날짜로 세팅
+            window.strategyDates[name] = todayStr; 
 
-            // 💡 새로 추가된 기법의 당일 날짜 데이터베이스에 0으로 채워진 기본값 강제 주입
             if (!window.dailyDatabase[todayStr]) {
                 window.dailyDatabase[todayStr] = { _meta: { fxRate: 1368.3 } };
             }
@@ -1389,7 +1413,10 @@
             
             window.renderDynamicTabs();
             window.renderManageList();
-            window.onDateChange();
+            
+            // 💡 초기화 직후 폼 및 대시보드 0으로 즉시 클리어 및 강제 저장
+            applyDataToForm(getDefaultStrategyData());
+            updateSummaryDashboard(true);
             
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
             alert("초기화가 완료되었습니다.");
