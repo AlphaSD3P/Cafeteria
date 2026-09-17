@@ -984,23 +984,9 @@
             const currentDateStr = document.getElementById('currentDate').value;
             const currentDayRealBasePrice = parseFloat(document.getElementById('basePrice').value) || 0;
 
-            // 🔥 [핵심 수정] "오늘 종가"와 "다음 거래일 실제 종가"는 서로 다른 날짜의 값입니다.
-            // (오늘 종가 기준으로 예약 매수/매도(LOC) 주문을 만들어두고, 다음 거래일의
-            //  실제 종가가 들어오면 그 가격에 따라 체결 여부가 결정되는 구조입니다.)
-            // 기존 코드는 이 팝업의 안내 문구에 "currentDateStr(오늘 날짜)"가 표시되어,
-            // 사용자가 "오늘 종가를 또 입력하라는 건가?"하고 헷갈려서 이미 위 칸에 입력한
-            // 오늘 종가를 실수로 다시 입력하기 쉬운 구조였습니다. 이렇게 되면 실제로는
-            // "다음 거래일 종가" 자리에 "오늘 종가"가 들어가 버려서, 그 이후 잔고 기록의
-            // 평가총합/누적손익률이 실제 시세 흐름과 어긋나기 시작합니다.
-            // → 다음 거래일 날짜를 먼저 계산해서 팝업 문구에 정확히 표시하도록 고쳤습니다.
-            let nextDateObjForPrompt = new Date(currentDateStr);
-            nextDateObjForPrompt.setDate(nextDateObjForPrompt.getDate() + 1);
-            let nextDateStr = `${nextDateObjForPrompt.getFullYear()}-${String(nextDateObjForPrompt.getMonth() + 1).padStart(2, '0')}-${String(nextDateObjForPrompt.getDate()).padStart(2, '0')}`;
-            nextDateStr = getValidBusinessDay(nextDateStr);
-
-            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ]\n오늘(${currentDateStr}) 종가 $${currentDayRealBasePrice.toFixed(2)} 기준으로 예약해 둔 매수/매도(LOC) 주문이 있습니다.\n\n👉 다음 거래일 [ ${nextDateStr} ]의 실제 장마감 종가를 입력하세요:\n(오늘 종가가 아니라, 반드시 "내일(${nextDateStr})"의 실제 종가를 입력해야 합니다)`);
+            const closeStr = prompt(`[ ${window.currentActiveStrategy} 기법 ] ${currentDateStr} 장마감 종가를 입력하세요:`);
             if (closeStr === null || closeStr.trim() === '') return;
-
+            
             const nextClosePrice = parseFloat(closeStr);
             if (isNaN(nextClosePrice) || nextClosePrice <= 0) {
                 alert("올바른 종가를 입력해주세요.");
@@ -1122,9 +1108,15 @@
                 drops: JSON.parse(JSON.stringify(rawDropsOnCurrentDay)) 
             };
 
-            // 🔥 [핵심 수정] nextDateStr은 위에서(팝업 문구를 만들 때) 이미 계산해 두었으므로
-            // 여기서 다시 계산하지 않고 그대로 재사용합니다. (동일한 변수를 두 번 계산하면
-            // 값이 어긋날 위험이 있어 한 곳에서만 계산하도록 통일했습니다.)
+            let dateObj = new Date(currentDateStr);
+            dateObj.setDate(dateObj.getDate() + 1);
+            const yyyy = dateObj.getFullYear();
+            const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const dd = String(dateObj.getDate()).padStart(2, '0');
+            let nextDateStr = `${yyyy}-${mm}-${dd}`;
+            
+            nextDateStr = getValidBusinessDay(nextDateStr);
+
             if (!window.dailyDatabase[nextDateStr]) {
                 window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
             }
