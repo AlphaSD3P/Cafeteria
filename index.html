@@ -68,7 +68,7 @@
 
         async function loadCloudDataAndInit() {
             try {
-                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitch");
+                const docRef = doc(db, "appData", "stockUserConfigAlgoSwitchMulti");
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists()) {
@@ -93,7 +93,7 @@
 
         window.saveCloudDataInstant = async function() {
             try {
-                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitch"), {
+                await setDoc(doc(db, "appData", "stockUserConfigAlgoSwitchMulti"), {
                     strategies: window.strategies,
                     allData: window.allData,
                     history: window.historyData
@@ -236,8 +236,8 @@
     function getDefaultStrategies() {
         return [
             { 
-                id: 'strat_switch_main', 
-                name: '스위치 통합 기법', 
+                id: 'strat_jan', 
+                name: 'JAN', 
                 defaultMult: 1, 
                 defaultCash: 50000, 
                 defaultShares: 0, 
@@ -245,10 +245,10 @@
                 defaultInit: 50000,
                 algo: {
                     basePrice: 90.00,       // 전날 종가
-                    totalRounds: 10,        // 전체 회차
-                    currentRound: 1,        // 진행 회차 (사면 +1, 팔면 -1)
+                    totalRounds: 16,        // 전체 회차
+                    currentRound: 1,        // 진행 회차
                     buyCash: 1500,          // 1회 매수금 ($)
-                    dropStep: 2.0           // 회차별 하락 매수 간격 (%)
+                    dropStep: 0.25          // 하락간격 (%)
                 }
             }
         ];
@@ -262,7 +262,7 @@
         }, 500);
     }
 
-    // 업다운 & 떨법 결합 알고리즘 자동 생성 함수
+    // 업다운 & 떨법 결합 알고리즘 주문 자동 생성 함수
     window.generateAlgoOrders = function(stratId) {
         let dateEl = document.getElementById(`date-${stratId}`);
         let multEl = document.getElementById(`mult-${stratId}`);
@@ -272,10 +272,10 @@
 
         // 입력값 가져오기
         let basePrice = parseFloat(document.getElementById(`algo-base-${stratId}`).value) || 90.00;
-        let totalRounds = parseInt(document.getElementById(`algo-totalrounds-${stratId}`).value) || 10;
+        let totalRounds = parseInt(document.getElementById(`algo-totalrounds-${stratId}`).value) || 16;
         let currentRound = parseInt(document.getElementById(`algo-round-${stratId}`).value) || 1;
         let buyCash = parseFloat(document.getElementById(`algo-buycash-${stratId}`).value) || 1500;
-        let dropStep = parseFloat(document.getElementById(`algo-drop-${stratId}`).value) || 2.0;
+        let dropStep = parseFloat(document.getElementById(`algo-drop-${stratId}`).value) || 0.25;
 
         // 전략 객체에 백업
         let strat = window.strategies.find(s => s.id === stratId);
@@ -284,25 +284,22 @@
             strat.algo = { basePrice, totalRounds, currentRound, buyCash, dropStep };
         }
 
-        // --- 1. 업다운 매수 & 매도 주문 생성 ---
-        // 업다운 매수: 회차별 하락 간격에 따라 분할 매수 (예수금/전체회차 또는 1회 매수금 기준)
         let buys = [];
         let updownBuyQty = Math.floor(buyCash / basePrice);
+        
+        // 업다운 매수 주문 생성
         for (let i = 1; i <= totalRounds; i++) {
             let p = basePrice * (1 - (dropStep * i) / 100);
             buys.push({ price: p.toFixed(2), qty: updownBuyQty });
         }
 
-        // 업다운 매도: 주가 하락 시 매수된 수량을 진행 회차로 나누어 어제 종가에 평균 수량 매도
+        // 업다운 매도 주문 생성
         let sells = [];
         let updownSellQtyPerRound = Math.max(1, Math.floor(updownBuyQty / Math.max(1, currentRound)));
         sells.push({ price: basePrice.toFixed(2), qty: updownSellQtyPerRound, isMoc: false });
 
-        // --- 2. 떨법 매수 & 매도 주문 생성 ---
-        // 떨법 매수: 어제 종가 기준 매수 수량
+        // 떨법 매수 & 매도 추가
         buys.push({ price: basePrice.toFixed(2), qty: updownBuyQty });
-        
-        // 떨법 매도: 어제 종가에 샀던 수량과 매수가를 그대로 고정·유지하면서 어제 종가에 매도
         sells.push({ price: basePrice.toFixed(2), qty: updownBuyQty, isMoc: false });
 
         // 데이터 저장
@@ -324,7 +321,7 @@
         window.strategies.forEach((strat, index) => {
             tabBtns.innerHTML += `<button class="tab-btn ${index === 0 ? 'active' : ''}" onclick="switchTab(${index})">${strat.name}</button>`;
 
-            let algo = strat.algo || { basePrice: 90.00, totalRounds: 10, currentRound: 1, buyCash: 1500, dropStep: 2.0 };
+            let algo = strat.algo || { basePrice: 90.00, totalRounds: 16, currentRound: 1, buyCash: 1500, dropStep: 0.25 };
 
             tabContents.innerHTML += `
                 <div class="tab-content ${index === 0 ? 'active' : ''}" id="content-${index}">
@@ -341,13 +338,13 @@
                             </div>
                         </div>
                         <hr style="border:0; border-top:1px solid #e2e8f0; margin:5px 0;">
-                        <div style="font-size:14px; font-weight:bold; color:#1a365d; margin-bottom:5px;">⚡ 업다운 & 떨법 매매 기법 설정</div>
+                        <div style="font-size:14px; font-weight:bold; color:#1a365d; margin-bottom:5px;">⚡ 업다운 & 떨법 매매 기법 설정 (${strat.name})</div>
                         <div class="control-row">
                             <div><label>전날 종가($)</label><input type="number" step="0.01" id="algo-base-${strat.id}" value="${algo.basePrice}"></div>
                             <div><label>전체 회차</label><input type="number" id="algo-totalrounds-${strat.id}" value="${algo.totalRounds}"></div>
                             <div><label>진행 회차</label><input type="number" id="algo-round-${strat.id}" value="${algo.currentRound}"></div>
                             <div><label>1회 매수금($)</label><input type="number" id="algo-buycash-${strat.id}" value="${algo.buyCash}"></div>
-                            <div><label>하락간격(%)</label><input type="number" step="0.1" id="algo-drop-${strat.id}" value="${algo.dropStep}"></div>
+                            <div><label>하락간격(%)</label><input type="number" step="0.01" id="algo-drop-${strat.id}" value="${algo.dropStep}"></div>
                         </div>
                         <div style="text-align:right; margin-top:8px;">
                             <button class="execute-btn" onclick="generateAlgoOrders('${strat.id}')" style="margin-top:0; padding:10px 20px; background-color:#38a169; width:auto; display:inline-block;">⚡ 알고리즘 주문 자동 생성</button>
@@ -432,10 +429,10 @@
         tabBtns.innerHTML += `<button class="tab-btn" onclick="switchTab(${setIdx})" style="color:#d69e2e;">⚙️ 기법 관리</button>`;
         tabContents.innerHTML += `
             <div class="tab-content" id="content-${setIdx}">
-                <h2 style="font-size:16px; margin-bottom:15px; text-align:center; color:#1a365d;">⚙️ 기법 관리</h2>
+                <h2 style="font-size:16px; margin-bottom:15px; text-align:center; color:#1a365d;">⚙️ 기법 관리 (JAN, FEB, MAR...)</h2>
                 <div id="strategy-manage-list"></div>
                 <div style="display:flex; gap:10px; margin-top:15px;">
-                    <input type="text" id="new-strat-name" placeholder="추가할 새 기법 이름 입력" style="flex:1; padding:10px; border:1px solid #cbd5e0; border-radius:6px;">
+                    <input type="text" id="new-strat-name" placeholder="추가할 새 기법 이름 입력 (예: FEB, MAR)" style="flex:1; padding:10px; border:1px solid #cbd5e0; border-radius:6px;">
                     <button class="execute-btn" onclick="addNewStrategy()" style="width:150px; margin-top:0; background-color:#38a169;">+ 기법 추가</button>
                 </div>
                 <button class="execute-btn" onclick="resetAllData()" style="background-color:#e53e3e; margin-top:30px;">전체 초기화</button>
@@ -550,7 +547,7 @@
 
     window.addNewStrategy = async function() {
         let nameInput = document.getElementById('new-strat-name');
-        let name = nameInput.value.trim();
+        let name = nameInput.value.trim().toUpperCase();
         if(!name) { alert("기법 이름을 입력해주세요."); return; }
         window.strategies.push({ 
             id: 'strat_' + Date.now(), 
@@ -560,7 +557,7 @@
             defaultShares: 0, 
             defaultAvg: 0, 
             defaultInit: 50000,
-            algo: { basePrice: 90.00, totalRounds: 10, currentRound: 1, buyCash: 1500, dropStep: 2.0 }
+            algo: { basePrice: 90.00, totalRounds: 16, currentRound: 1, buyCash: 1500, dropStep: 0.25 }
         });
         await window.saveCloudDataInstant();
         location.reload();
