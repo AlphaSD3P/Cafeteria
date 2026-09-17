@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V46 통합본)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V47 통합본)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -236,7 +236,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V46 - 주말/휴장 자동 스킵 및 날짜 건너뛰기 기능 추가)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V47 - 전일 종가 자동 상속 기능 보완)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -448,13 +448,12 @@
             return localISOTime;
         }
 
-        // 주말(토, 일)을 자동 건너뛰고 영업일을 찾아주는 함수
         function getValidBusinessDay(dateStr) {
             let d = new Date(dateStr);
             let day = d.getDay();
-            if (day === 6) { // 토요일이면 월요일(+2일)로 이동
+            if (day === 6) {
                 d.setDate(d.getDate() + 2);
-            } else if (day === 0) { // 일요일이면 월요일(+1일)로 이동
+            } else if (day === 0) {
                 d.setDate(d.getDate() + 1);
             }
             let offset = d.getTimezoneOffset() * 60000;
@@ -522,7 +521,6 @@
             let dateStr = document.getElementById('currentDate').value;
             if (!dateStr || !window.currentActiveStrategy) return;
             
-            // 주말 선택 시 자동으로 유효한 평일로 교정
             let validDateStr = getValidBusinessDay(dateStr);
             if (validDateStr !== dateStr) {
                 document.getElementById('currentDate').value = validDateStr;
@@ -535,7 +533,6 @@
                 window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 } };
             }
 
-            // 기법별 데이터 독립 격리 생성 (이전 날짜 데이터 안전 상속)
             window.strategyNames.forEach(st => {
                 if (!window.dailyDatabase[dateStr][st]) {
                     let sortedDates = Object.keys(window.dailyDatabase).sort();
@@ -546,6 +543,9 @@
                         let prev = lastData[st];
                         let carriedRealized = prev.realizedProfit || 0;
                         let carriedBudget = (prev.baseBudget || 0) + carriedRealized;
+                        // 🔥 직전 날짜의 종가(basePrice)를 다음 날의 당일 기준 가격(basePrice)으로 자동 상속
+                        let carriedBasePrice = prev.basePrice || 0;
+                        let carriedAnchorPrice = prev.anchorPrice || carriedBasePrice;
 
                         window.dailyDatabase[dateStr][st] = {
                             baseBudget: carriedBudget,
@@ -554,8 +554,8 @@
                             totalSteps: prev.totalSteps,
                             buyAmount: prev.buyAmount,
                             dropRate: prev.dropRate,
-                            basePrice: prev.basePrice,
-                            anchorPrice: prev.anchorPrice,
+                            basePrice: carriedBasePrice,     // 전일 종가 자동 상속
+                            anchorPrice: carriedAnchorPrice, // 기준가격 유지
                             currentStep: prev.currentStep,
                             totalQty: prev.totalQty,
                             drops: JSON.parse(JSON.stringify(prev.drops || []))
@@ -941,7 +941,6 @@
             document.getElementById('sellResultArea').innerHTML = sellHtml;
         };
 
-        // ⏩ 휴장/스킵 버튼: 거래 없이 그대로 다음 영업일 날짜로 데이터 복사 및 점프
         window.skipDayWithoutTrade = function() {
             const currentDateStr = document.getElementById('currentDate').value;
             let dateObj = new Date(currentDateStr);
@@ -959,11 +958,10 @@
                 window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
             }
 
-            // 오늘 상태를 거래 체결 없이 그대로 다음 날짜로 복사 이월
             window.strategyNames.forEach(st => {
                 let currentStData = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
                 window.dailyDatabase[nextDateStr][st] = JSON.parse(JSON.stringify(currentStData));
-                window.dailyDatabase[nextDateStr][st].io = 0; // 입출금은 초기화
+                window.dailyDatabase[nextDateStr][st].io = 0; 
             });
 
             window.strategyDates[window.currentActiveStrategy] = nextDateStr;
@@ -1104,7 +1102,6 @@
             const dd = String(dateObj.getDate()).padStart(2, '0');
             let nextDateStr = `${yyyy}-${mm}-${dd}`;
             
-            // 다음 날이 주말이면 월요일로 자동 점프
             nextDateStr = getValidBusinessDay(nextDateStr);
 
             if (!window.dailyDatabase[nextDateStr]) {
