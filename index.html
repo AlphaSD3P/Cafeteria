@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>통합 퉁치기 & 다중 기법 관리 시스템</title>
+    <title>통합 퉁치기 & 잔고 일별 기록 시스템</title>
     
-    <!-- Firebase SDK (App, Firestore, Auth) 불러오기 -->
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -28,19 +28,13 @@
         const provider = new GoogleAuthProvider();
 
         window.loginWithGoogle = async function() {
-            try {
-                await signInWithPopup(auth, provider);
-            } catch (error) {
-                alert("로그인 실패: " + error.message);
-            }
+            try { await signInWithPopup(auth, provider); } 
+            catch (e) { alert("로그인 실패: " + e.message); }
         };
 
         window.logout = async function() {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                console.error("로그아웃 실패", error);
-            }
+            try { await signOut(auth); } 
+            catch (e) { console.error("로그아웃 실패", e); }
         };
 
         onAuthStateChanged(auth, async (user) => {
@@ -54,7 +48,6 @@
                     await signOut(auth);
                     return;
                 }
-
                 loginScreen.style.display = 'none';
                 appScreen.style.display = 'block';
                 if(userEmailDisplay) userEmailDisplay.textContent = `접속 계정: ${user.email}`;
@@ -74,24 +67,24 @@
                 if (docSnap.exists()) {
                     const cloudVal = docSnap.data();
                     window.dailyDatabase = cloudVal.dailyDatabase || {};
-                    window.strategyNames = cloudVal.strategyNames || ['기본기법'];
+                    window.strategyNames = cloudVal.strategyNames || ['스', '윙', '장', '투'];
 
-                    // [데이터 마이그레이션] 기존 단일 구조 데이터를 다중 기법 구조로 자동 변환
+                    // 이전 데이터 자동 마이그레이션
                     for (let date in window.dailyDatabase) {
                         if (window.dailyDatabase[date].baseBudget !== undefined) {
                             let oldData = window.dailyDatabase[date];
-                            window.dailyDatabase[date] = { "기본기법": oldData };
+                            window.dailyDatabase[date] = { "스": oldData };
                         }
                     }
                 } else {
                     window.dailyDatabase = {};
-                    window.strategyNames = ['기본기법'];
+                    window.strategyNames = ['스', '윙', '장', '투'];
                     await window.saveCloudDataInstant();
                 }
             } catch (e) {
                 console.error("클라우드 로드 실패:", e);
                 window.dailyDatabase = {};
-                window.strategyNames = ['기본기법'];
+                window.strategyNames = ['스', '윙', '장', '투'];
             }
             
             let sortedDates = Object.keys(window.dailyDatabase).sort();
@@ -112,98 +105,92 @@
                         dailyDatabase: window.dailyDatabase,
                         strategyNames: window.strategyNames
                     });
+                    console.log("클라우드 저장 완료");
                 } catch (e) {
                     console.error("클라우드 저장 실패:", e);
                 }
-            }, 800);
+            }, 500);
         };
-        window.db = db;
     </script>
 
     <style>
         body { 
-            font-family: 'Malgun Gothic', sans-serif; 
-            background-color: #f4f6f9; 
+            font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; 
+            background-color: #f8fafc; 
             margin: 0; padding: 20px; color: #334155;
             display: flex; justify-content: center; align-items: flex-start; min-height: 100vh;
         }
 
-        /* 로그인 화면 */
         #login-screen {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); width: 100%; max-width: 400px; text-align: center; margin-top: 10vh;
         }
-        #login-screen h2 { color: #1e3a8a; margin-bottom: 10px; font-size: 22px; }
-        .google-login-btn { width: 100%; padding: 12px; background-color: #fff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        #login-screen h2 { color: #1e3a8a; margin-bottom: 20px; font-size: 22px; }
+        .google-login-btn { width: 100%; padding: 12px; background-color: #fff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
 
-        /* 메인 화면 */
-        #app-screen { display: none; width: 100%; max-width: 1250px; background-color: white; padding: 22px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        #app-screen { display: none; width: 100%; max-width: 1000px; background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .user-info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; background: #f8fafc; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
         .logout-btn { background: none; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 4px; cursor: pointer; color: #ef4444; font-weight: bold; font-size: 12px;}
         
-        .header { text-align: center; margin-bottom: 18px; }
+        .header { text-align: center; margin-bottom: 20px; }
         h2 { color: #1e3a8a; margin: 0 0 6px 0; font-size: 24px; }
-        .subtitle { color: #64748b; font-size: 13px; margin-bottom: 20px; }
+        .subtitle { color: #64748b; font-size: 13px; }
         
-        /* 탭 디자인 */
-        .tabs-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
-        .strategy-tabs { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-bottom: 5px; }
-        .strategy-tabs div { padding: 8px 20px; background: #f1f5f9; border-radius: 20px; color: #64748b; font-weight: bold; cursor: pointer; font-size: 14px; border: 1px solid #cbd5e1; transition: all 0.2s; }
+        .strategy-tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px; }
+        .strategy-tabs div { padding: 6px 16px; background: #f1f5f9; border-radius: 20px; color: #64748b; font-weight: bold; cursor: pointer; font-size: 13px; border: 1px solid #cbd5e1; }
         .strategy-tabs .active { background: #1e3a8a; color: white; border-color: #1e3a8a; }
         
-        .main-tabs { display: flex; gap: 20px; border-bottom: 2px solid #e2e8f0; justify-content: center; }
+        .main-tabs { display: flex; gap: 20px; border-bottom: 2px solid #e2e8f0; justify-content: center; margin-bottom: 20px; }
         .main-tabs div { padding: 10px 15px; color: #64748b; font-weight: bold; cursor: pointer; font-size: 15px; }
         .main-tabs .active { color: #1e3a8a; border-bottom: 3px solid #1e3a8a; margin-bottom: -2px; }
 
         .tab-content { display: none; }
         .tab-content.active-content { display: block; }
 
-        /* 공통 폼 스타일 */
-        .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
-        .top-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
-        .triple-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px; }
-        .card-box { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
-        .card-title { font-weight: bold; color: #475569; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 6px; font-size: 13px; }
+        /* 입력바 스타일 */
+        .top-input-bar { display: flex; gap: 15px; justify-content: space-between; align-items: center; background: #f8fafc; padding: 12px 18px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 15px; }
+        .input-item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: bold; }
+        .input-item input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: bold; width: 110px; text-align: right; }
+
+        /* 테이블 스타일 */
+        .balance-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 13px; margin-bottom: 15px; border: 1px solid #e2e8f0; }
+        .balance-table th { background-color: #f8fafc; padding: 10px; border: 1px solid #e2e8f0; color: #475569; font-weight: bold; }
+        .balance-table td { padding: 10px; border: 1px solid #e2e8f0; color: #334155; }
+        .balance-table tfoot tr { background-color: #f1f5f9; font-weight: bold; }
+
+        .profit-text { color: #ef4444; font-weight: bold; }
+        .loss-text { color: #2563eb; font-weight: bold; }
+
+        /* 원화 환산 영역 */
+        .krw-card { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .krw-title { font-size: 15px; font-weight: bold; color: #166534; }
+        .krw-diff { font-size: 13px; font-weight: bold; }
+        .krw-total { font-size: 20px; font-weight: bold; color: #15803d; }
+
+        .btn-green-save { width: 100%; background-color: #10b981; color: white; font-size: 16px; font-weight: bold; border: none; padding: 14px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+        .btn-green-save:hover { background-color: #059669; }
+
+        /* 히스토리 섹션 */
+        .history-section-header { display: flex; justify-content: space-between; align-items: center; margin: 25px 0 15px 0; }
+        .history-title { font-size: 16px; font-weight: bold; color: #1e3a8a; }
+        .btn-filter-toggle { background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; color: #475569; cursor: pointer; }
+
+        .history-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .history-card-header { display: flex; justify-content: space-between; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; margin-bottom: 10px; font-size: 14px; font-weight: bold; color: #1e3a8a; }
+        .history-card-body { font-size: 13px; line-height: 1.6; color: #334155; }
+        .history-bullets { list-style: none; padding: 0; margin: 8px 0 0 0; }
+        .history-bullets li { position: relative; padding-left: 14px; font-size: 12px; color: #475569; margin-bottom: 4px; }
+        .history-bullets li::before { content: '●'; color: #3b82f6; position: absolute; left: 0; font-size: 8px; top: 1px; }
+
+        /* 매매 입력 및 기타 스타일 */
+        .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
+        .top-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 15px; }
+        .input-group-form { display: flex; flex-direction: column; gap: 4px; }
+        .input-group-form label { font-size: 11px; font-weight: bold; color: #475569; }
+        .input-group-form input { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; text-align: right; width: 100%; box-sizing: border-box; }
         
-        .input-group { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
-        .input-group label { font-size: 11px; font-weight: bold; }
-        .input-group input { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; text-align: right; width: 100%; box-sizing: border-box; }
-        .input-group input[readonly] { background-color: #f1f5f9; color: #64748b; cursor: not-allowed; }
-
-        /* 기법 관리 전용 스타일 */
-        .manage-list { max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-        .manage-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 15px 20px; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
-        .manage-item .m-name { font-weight: bold; font-size: 16px; color: #1e3a8a; flex: 1; }
-        .manage-item .m-idx { color: #94a3b8; font-weight: bold; width: 30px; }
-        .btn-del { color: #ef4444; border: 1px solid #fecaca; background: #fef2f2; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
-        .btn-del:hover { background: #fee2e2; }
-        
-        .manage-add-row { display: flex; gap: 10px; margin-top: 15px; }
-        .manage-add-row input { flex: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; }
-        .btn-add { background: #10b981; color: white; font-weight: bold; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; font-size: 14px; }
-        .btn-reset { width: 100%; background: #ef4444; color: white; font-weight: bold; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 15px; margin-top: 30px; }
-
-        /* 세련된 통합 장부 스타일 */
-        .summary-table { width: 100%; border-collapse: collapse; text-align: center; background: white; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
-        .summary-table th { background-color: #f8fafc; font-weight: bold; padding: 12px; border-bottom: 2px solid #e2e8f0; color: #475569; }
-        .summary-table td { border-bottom: 1px solid #e2e8f0; padding: 12px; }
-        .summary-table tr:hover { background-color: #f1f5f9; }
-        
-        .history-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-        .history-header { display: flex; justify-content: space-between; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 12px; }
-        .history-date { font-size: 16px; font-weight: bold; color: #1e3a8a; }
-        .history-stats { font-size: 14px; font-weight: bold; }
-        .history-sub { font-size: 13px; color: #64748b; margin-bottom: 10px; }
-        .history-bullets { list-style: none; padding: 0; margin: 0; font-size: 13px; }
-        .history-bullets li { position: relative; padding-left: 15px; margin-bottom: 6px; color: #334155; }
-        .history-bullets li::before { content: '●'; color: #3b82f6; position: absolute; left: 0; font-size: 10px; top: 3px; }
-
-        .action-row { display: flex; gap: 12px; margin-top: 15px; }
-        .btn-generate { background-color: #22c55e; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; flex: 1; }
-        .btn-nextday { background-color: #3b82f6; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; flex: 1; }
-
-        .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
-        .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        .manage-list { max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+        .manage-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -224,153 +211,115 @@
             <div class="subtitle">클라우드 보안 실시간 동기화 시스템</div>
         </div>
 
-        <div class="tabs-container">
-            <!-- 동적으로 생성될 기법 탭 위치 -->
-            <div class="strategy-tabs" id="strategyTabsContainer"></div>
-            
-            <div class="main-tabs">
-                <div class="active" onclick="switchMainTab(0)">📊 통합 결과보기</div>
-                <div onclick="switchMainTab(1)">📝 매매 입력 (자동주문)</div>
-                <div onclick="switchMainTab(2)">📉 잔고&일별기록</div>
-                <div onclick="switchMainTab(3)">⚙️ 기법 관리</div>
-            </div>
+        <div class="strategy-tabs" id="strategyTabsContainer"></div>
+        
+        <div class="main-tabs">
+            <div onclick="switchMainTab(0)">📊 통합 결과보기</div>
+            <div onclick="switchMainTab(1)">📝 매매 입력</div>
+            <div class="active" onclick="switchMainTab(2)">📉 잔고&일별기록</div>
+            <div onclick="switchMainTab(3)">⚙️ 기법 관리</div>
         </div>
 
         <!-- [탭 0] 통합 결과보기 -->
-        <div id="mainTab0" class="tab-content active-content">
-            <div class="result-section" style="background-color: white;">
-                <div style="font-weight: bold; color: #1e3a8a; font-size: 16px; margin-bottom: 15px;">
-                    📈 <span id="summaryDateDisplay"></span> 통합 포트폴리오 현황
-                </div>
-                <table class="summary-table">
-                    <thead>
-                        <tr>
-                            <th>기법</th>
-                            <th>보유수량</th>
-                            <th>평균단가($)</th>
-                            <th>잔여달러($)</th>
-                            <th>평가총합($)</th>
-                            <th>평가손익($)</th>
-                            <th>수익률(%)</th>
-                            <th>초기자금($)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="integratedSummaryBody">
-                        <!-- 동적 렌더링 -->
-                    </tbody>
-                </table>
+        <div id="mainTab0" class="tab-content">
+            <div style="font-weight: bold; color: #1e3a8a; font-size: 16px; margin-bottom: 15px;">
+                📈 포트폴리오 요약
             </div>
+            <table class="balance-table">
+                <thead>
+                    <tr>
+                        <th>기법</th><th>보유수량</th><th>평균단가($)</th><th>잔여달러($)</th><th>평가총합($)</th><th>평가손익($)</th><th>수익률</th>
+                    </tr>
+                </thead>
+                <tbody id="integratedSummaryBody"></tbody>
+            </table>
         </div>
 
-        <!-- [탭 1] 매매 입력 (선택된 기법의 주문 폼) -->
+        <!-- [탭 1] 매매 입력 -->
         <div id="mainTab1" class="tab-content">
             <div class="settings-panel">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
-                    <div style="font-size: 16px; font-weight: bold; color: #ea580c;">
-                        🎯 현재 수정 중인 기법: <span id="currentStrategyNameDisplay" style="color: #1e3a8a; font-size: 18px;"></span>
-                    </div>
+                <div style="font-size: 15px; font-weight: bold; color: #ea580c; margin-bottom: 12px;">
+                    🎯 현재 수정 중인 기법: <span id="currentStrategyNameDisplay" style="color: #1e3a8a;"></span>
                 </div>
-
                 <div class="top-row">
-                    <div class="input-group">
-                        <label>📅 현재 거래일</label>
-                        <input type="date" id="currentDate" onchange="onDateChange()">
-                    </div>
-                    <div class="input-group">
-                        <label>💰 초기 자금($)</label>
-                        <input type="number" id="baseBudget" oninput="autoSaveState()">
-                    </div>
-                    <div class="input-group">
-                        <label style="color:#b45309;">➕ 당일 입출금($)</label>
-                        <input type="number" id="dailyIo" oninput="autoSaveState()" style="color:#b45309; font-weight:bold;">
-                    </div>
-                    <div class="input-group">
-                        <label>🔢 총 회차 설정</label>
-                        <input type="number" id="totalStepsSetting" oninput="autoSaveState()">
-                    </div>
-                    <div class="input-group">
-                        <label>🔒 매수금액($)</label>
-                        <input type="number" id="buyAmount" oninput="autoSaveState()" style="background:#fffbeb; font-weight:bold; color:#b45309;">
-                    </div>
-                    <div class="input-group">
-                        <label>📉 하락간격(%)</label>
-                        <input type="number" id="dropRate" step="0.01" oninput="autoSaveState()">
-                    </div>
+                    <div class="input-group-form"><label>초기 자금($)</label><input type="number" id="baseBudget" oninput="autoSaveState()"></div>
+                    <div class="input-group-form"><label>당일 입출금($)</label><input type="number" id="dailyIo" oninput="autoSaveState()"></div>
+                    <div class="input-group-form"><label>총 회차 설정</label><input type="number" id="totalStepsSetting" oninput="autoSaveState()"></div>
+                    <div class="input-group-form"><label>매수금액($)</label><input type="number" id="buyAmount" oninput="autoSaveState()"></div>
+                    <div class="input-group-form"><label>하락간격(%)</label><input type="number" id="dropRate" step="0.01" oninput="autoSaveState()"></div>
+                    <div class="input-group-form"><label>현재 회차</label><input type="number" id="currentStep" oninput="autoSaveState()"></div>
                 </div>
-
-                <div class="triple-row">
-                    <div class="card-box" style="background: #f8fafc;">
-                        <div class="card-title"><span style="color:#1d4ed8">■ 단일 기법 자산 대시보드</span></div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                            <div class="input-group"><label>💵 잔여 달러</label><input type="text" id="remainingCash" readonly></div>
-                            <div class="input-group"><label>📦 총 보유수량</label><input type="text" id="totalHoldingCount" readonly></div>
-                            <div class="input-group"><label>🎯 평균 단가</label><input type="text" id="averagePrice" readonly></div>
-                            <div class="input-group"><label>📈 평가 손익</label><input type="text" id="totalProfitLoss" readonly></div>
-                        </div>
-                    </div>
-
-                    <div class="card-box">
-                        <div class="card-title"><span style="color:#ea580c">■ 업다운 상태 입력</span></div>
-                        <div class="input-group"><label>현재 종가 기준($)</label><input type="number" id="basePrice" step="0.01" oninput="autoSaveState()" style="font-weight:bold; color:#1e3a8a; background:#eff6ff;"></div>
-                        <div class="input-group"><label style="color:#b45309;">📌 직전 체결가</label><input type="number" id="anchorPrice" step="0.01" oninput="autoSaveState()"></div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                            <div class="input-group"><label>현재 회차</label><input type="number" id="currentStep" oninput="autoSaveState()"></div>
-                            <div class="input-group"><label>보유수량</label><input type="number" id="totalQty" oninput="autoSaveState()"></div>
-                        </div>
-                    </div>
-
-                    <div class="card-box">
-                        <div class="card-title"><span style="color:#9333ea">■ 떨법 물량</span></div>
-                        <div id="dropHoldingsContainer" style="max-height: 180px; overflow-y: auto;"></div>
-                    </div>
-                </div>
-
-                <div class="action-row">
-                    <button class="btn-generate" onclick="generateTable()">⚡ [현재 기법] 오늘자 주문 생성</button>
-                    <button class="btn-nextday" onclick="processSettlement()">📝 [전체 기법 통합] 장 마감 결산 반영 (다음날 이월)</button>
-                </div>
-            </div>
-            
-            <div class="orders-container">
-                <div class="result-section">
-                    <div style="color: #ef4444; font-weight: bold; margin-bottom: 10px;">생성된 매수 주문 (LOC) 미리보기</div>
-                    <div id="buyResultArea"><div style="text-align:center; color:#94a3b8; font-size:12px;">주문 내역이 없습니다.</div></div>
-                </div>
-                <div class="result-section">
-                    <div style="color: #3b82f6; font-weight: bold; margin-bottom: 10px;">생성된 매도 주문 (LOC) 미리보기</div>
-                    <div id="sellResultArea"><div style="text-align:center; color:#94a3b8; font-size:12px;">주문 내역이 없습니다.</div></div>
+                <div class="top-row">
+                    <div class="input-group-form"><label>보유 수량</label><input type="number" id="totalQty" oninput="autoSaveState()"></div>
+                    <div class="input-group-form"><label>직전 체결가($)</label><input type="number" id="anchorPrice" step="0.01" oninput="autoSaveState()"></div>
                 </div>
             </div>
         </div>
 
-        <!-- [탭 2] 잔고&일별기록 -->
-        <div id="mainTab2" class="tab-content">
-            <div id="ledgerHistoryContainer">
-                <!-- 동적 렌더링 -->
+        <!-- [탭 2] 잔고&일별기록 (첨부 이미지 UI 동일 구현) -->
+        <div id="mainTab2" class="tab-content active-content">
+            <!-- 상단 입력바 -->
+            <div class="top-input-bar">
+                <div class="input-item">
+                    <span>📅 기록 날짜</span>
+                    <input type="date" id="currentDate" onchange="onDateChange()">
+                </div>
+                <div class="input-item">
+                    <span>당일 종가($)</span>
+                    <input type="number" id="closingPriceInput" step="0.01" value="107.34" oninput="updateTab2Calculations()">
+                </div>
+                <div class="input-item">
+                    <span>환율(원/달러)</span>
+                    <input type="number" id="fxRateInput" step="0.1" value="1368.3" oninput="updateTab2Calculations()">
+                </div>
             </div>
+
+            <!-- 기법별 상세 현황 테이블 -->
+            <table class="balance-table">
+                <thead>
+                    <tr>
+                        <th>기법명</th>
+                        <th>보유수량</th>
+                        <th>평균가($)</th>
+                        <th>잔여달러($)</th>
+                        <th>평가총합($)</th>
+                        <th>평가손익($)</th>
+                        <th>수익률</th>
+                        <th>초기자금($)</th>
+                    </tr>
+                </thead>
+                <tbody id="tab2TableBody"></tbody>
+                <tfoot id="tab2TableFoot"></tfoot>
+            </table>
+
+            <!-- 원화 환산액 카드 -->
+            <div class="krw-card">
+                <div>
+                    <div class="krw-title">💵 원화 환산액 <small id="krwFxRateSub">(₩1,368.3 기준)</small></div>
+                    <div class="krw-diff" id="krwDiffDisplay">전일 대비 -</div>
+                </div>
+                <div class="krw-total" id="krwTotalDisplay">₩0</div>
+            </div>
+
+            <!-- 클라우드 저장 버튼 -->
+            <button class="btn-green-save" onclick="saveCurrentLedgerToCloud()">💾 일별 잔고 클라우드 기록 저장</button>
+
+            <!-- 일별 누적 히스토리 -->
+            <div class="history-section-header">
+                <div class="history-title">📝 일별 누적 히스토리</div>
+                <button class="btn-filter-toggle" id="filterToggleBtn" onclick="toggleHistoryFilter()">조회일만 보기 전환</button>
+            </div>
+
+            <div id="historyListContainer"></div>
         </div>
 
         <!-- [탭 3] 기법 관리 -->
         <div id="mainTab3" class="tab-content">
-            <div class="result-section" style="background: transparent; border: none;">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <h3 style="color: #1e3a8a; margin: 0 0 5px 0;">⚙️ 매매기법 관리</h3>
-                    <p style="color: #64748b; font-size: 13px; margin: 0;">원하는 이름의 매매기법을 자유롭게 추가하고 삭제하세요.</p>
-                </div>
-                
-                <div class="manage-list" id="manageListContainer">
-                    <!-- 동적 렌더링 -->
-                </div>
-
-                <div class="manage-list" style="margin-top: 15px;">
-                    <div class="manage-add-row">
-                        <input type="text" id="newStrategyName" placeholder="추가할 새 기법 이름">
-                        <button class="btn-add" onclick="addNewStrategy()">+ 기법 추가</button>
-                    </div>
-                </div>
-                
-                <div class="manage-list">
-                    <button class="btn-reset" onclick="resetAllData()">초기화 (모든 장부/기법 삭제)</button>
+            <div class="manage-list" id="manageListContainer"></div>
+            <div class="manage-list" style="margin-top: 15px;">
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="newStrategyName" placeholder="추가할 새 기법 이름" style="flex:1; padding:10px; border:1px solid #cbd5e1; border-radius:6px;">
+                    <button onclick="addNewStrategy()" style="background:#10b981; color:white; border:none; padding:10px 15px; border-radius:6px; font-weight:bold; cursor:pointer;">+ 기법 추가</button>
                 </div>
             </div>
         </div>
@@ -378,58 +327,43 @@
 
     <script>
         window.dailyDatabase = {};
-        window.strategyNames = [];
-        window.currentActiveStrategy = '';
-        window.globalPendingBuys = [];
-        window.globalPendingSells = [];
+        window.strategyNames = ['스', '윙', '장', '투'];
+        window.currentActiveStrategy = '스';
+        window.isFilterDateOnly = false; // false: 전체보기, true: 조회일만 보기
 
         function getTodayStr() {
             let d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         }
 
-        // =====================================
-        // UI Navigation & Tabs
-        // =====================================
         window.switchMainTab = function(index) {
-            document.querySelectorAll('.main-tabs div').forEach((t, i) => {
-                t.classList.toggle('active', i === index);
-            });
-            document.querySelectorAll('.tab-content').forEach((c, i) => {
-                c.classList.toggle('active-content', i === index);
-            });
+            document.querySelectorAll('.main-tabs div').forEach((t, i) => t.classList.toggle('active', i === index));
+            document.querySelectorAll('.tab-content').forEach((c, i) => c.classList.toggle('active-content', i === index));
             
             if (index === 0) updateIntegratedSummary();
-            if (index === 2) updateLedgerUI();
+            if (index === 2) updateTab2Calculations();
             if (index === 3) renderManageList();
         };
 
         window.renderDynamicTabs = function() {
             const container = document.getElementById('strategyTabsContainer');
             container.innerHTML = '';
-            
             window.strategyNames.forEach(st => {
                 const btn = document.createElement('div');
                 btn.textContent = st;
                 if (st === window.currentActiveStrategy) btn.classList.add('active');
-                
                 btn.onclick = () => {
                     window.currentActiveStrategy = st;
                     window.renderDynamicTabs();
-                    window.onDateChange(); // 폼 데이터 새로고침
-                    window.switchMainTab(1); // 폼 탭으로 강제 이동
+                    window.onDateChange();
                 };
                 container.appendChild(btn);
             });
-
             document.getElementById('currentStrategyNameDisplay').textContent = window.currentActiveStrategy;
         };
 
-        // =====================================
-        // Data Handling (다중 기법 지원)
-        // =====================================
         function getDefaultStrategyData() {
-            return { baseBudget: 60000, io: 0, realizedProfit: 0, totalSteps: 16, buyAmount: 1500, dropRate: 0.25, basePrice: 100, anchorPrice: 100, currentStep: 0, totalQty: 0, drops: [] };
+            return { baseBudget: 60000, io: 0, realizedProfit: 0, totalSteps: 16, buyAmount: 1500, dropRate: 0.25, anchorPrice: 100, currentStep: 0, totalQty: 0, drops: [] };
         }
 
         window.onDateChange = function() {
@@ -437,77 +371,46 @@
             if (!dateStr) return;
 
             if (!window.dailyDatabase[dateStr]) {
-                // 이전 데이터 탐색하여 이월
                 let sortedDates = Object.keys(window.dailyDatabase).sort();
                 let pastDates = sortedDates.filter(d => d < dateStr);
-                
-                window.dailyDatabase[dateStr] = {};
-                
+                window.dailyDatabase[dateStr] = { _meta: { closingPrice: 107.34, fxRate: 1368.3 } };
                 let lastData = pastDates.length > 0 ? window.dailyDatabase[pastDates[pastDates.length - 1]] : null;
                 
                 window.strategyNames.forEach(st => {
                     if (lastData && lastData[st]) {
                         let prev = lastData[st];
-                        let carriedBudget = (prev.baseBudget || 0) + (prev.io || 0) + (prev.realizedProfit || 0);
-                        window.dailyDatabase[dateStr][st] = {
-                            ...prev, baseBudget: carriedBudget, io: 0, realizedProfit: 0, drops: JSON.parse(JSON.stringify(prev.drops || []))
-                        };
+                        window.dailyDatabase[dateStr][st] = { ...prev, io: 0, realizedProfit: 0 };
                     } else {
                         window.dailyDatabase[dateStr][st] = getDefaultStrategyData();
                     }
                 });
-            } else {
-                // 특정 날짜에 새 기법이 추가된 상태일 수 있으므로 누락된 기법 채워넣기
-                window.strategyNames.forEach(st => {
-                    if (!window.dailyDatabase[dateStr][st]) window.dailyDatabase[dateStr][st] = getDefaultStrategyData();
-                });
             }
-            
-            applyDataToScreen(window.dailyDatabase[dateStr][window.currentActiveStrategy]);
-            updateIntegratedSummary();
+
+            let meta = window.dailyDatabase[dateStr]._meta || { closingPrice: 107.34, fxRate: 1368.3 };
+            document.getElementById('closingPriceInput').value = meta.closingPrice || 107.34;
+            document.getElementById('fxRateInput').value = meta.fxRate || 1368.3;
+
+            applyDataToForm(window.dailyDatabase[dateStr][window.currentActiveStrategy]);
+            updateTab2Calculations();
         };
 
-        function applyDataToScreen(data) {
+        function applyDataToForm(data) {
             if (!data) return;
-            document.getElementById('baseBudget').value = data.baseBudget;
-            document.getElementById('dailyIo').value = data.io;
-            document.getElementById('totalStepsSetting').value = data.totalSteps;
-            document.getElementById('buyAmount').value = data.buyAmount;
-            document.getElementById('dropRate').value = data.dropRate;
-            document.getElementById('basePrice').value = data.basePrice;
-            document.getElementById('anchorPrice').value = data.anchorPrice;
-            document.getElementById('currentStep').value = data.currentStep;
-            document.getElementById('totalQty').value = data.totalQty;
-            
-            const dropsContainer = document.getElementById('dropHoldingsContainer');
-            dropsContainer.innerHTML = '';
-            (data.drops || []).forEach((d, idx) => {
-                const div = document.createElement('div');
-                div.style.cssText = "display: flex; gap: 5px; margin-bottom: 5px;";
-                div.innerHTML = `
-                    <span style="font-size:11px; width:40px; font-weight:bold;">떨법${idx+1}</span>
-                    <input type="number" step="0.01" class="d-price" value="${d.price}" placeholder="단가" oninput="autoSaveState()" style="width:70px; padding:3px; font-size:11px;">
-                    <input type="number" class="d-qty" value="${d.qty}" placeholder="수량" oninput="autoSaveState()" style="width:50px; padding:3px; font-size:11px;">
-                `;
-                dropsContainer.appendChild(div);
-            });
-
-            calculateAndShowSingleSummary(data);
+            document.getElementById('baseBudget').value = data.baseBudget || 60000;
+            document.getElementById('dailyIo').value = data.io || 0;
+            document.getElementById('totalStepsSetting').value = data.totalSteps || 16;
+            document.getElementById('buyAmount').value = data.buyAmount || 1500;
+            document.getElementById('dropRate').value = data.dropRate || 0.25;
+            document.getElementById('currentStep').value = data.currentStep || 0;
+            document.getElementById('totalQty').value = data.totalQty || 0;
+            document.getElementById('anchorPrice').value = data.anchorPrice || 100;
         }
 
         window.autoSaveState = function() {
             const dateStr = document.getElementById('currentDate').value;
             if (!dateStr || !window.currentActiveStrategy) return;
 
-            let drops = [];
-            document.querySelectorAll('#dropHoldingsContainer > div').forEach(row => {
-                let p = parseFloat(row.querySelector('.d-price').value);
-                let q = parseInt(row.querySelector('.d-qty').value);
-                if (!isNaN(p) && !isNaN(q) && q > 0) drops.push({ price: p, qty: q, date: dateStr });
-            });
-
-            let stData = window.dailyDatabase[dateStr][window.currentActiveStrategy];
-
+            let stData = window.dailyDatabase[dateStr][window.currentActiveStrategy] || {};
             window.dailyDatabase[dateStr][window.currentActiveStrategy] = {
                 ...stData,
                 baseBudget: parseFloat(document.getElementById('baseBudget').value) || 0,
@@ -515,232 +418,249 @@
                 totalSteps: parseInt(document.getElementById('totalStepsSetting').value) || 16,
                 buyAmount: parseFloat(document.getElementById('buyAmount').value) || 1500,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
-                basePrice: parseFloat(document.getElementById('basePrice').value) || 0,
-                anchorPrice: parseFloat(document.getElementById('anchorPrice').value) || 0,
                 currentStep: parseInt(document.getElementById('currentStep').value) || 0,
                 totalQty: parseInt(document.getElementById('totalQty').value) || 0,
-                drops: drops
+                anchorPrice: parseFloat(document.getElementById('anchorPrice').value) || 0,
             };
 
-            calculateAndShowSingleSummary(window.dailyDatabase[dateStr][window.currentActiveStrategy]);
+            updateTab2Calculations();
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
         };
 
-        // 개별 기법 계산 (폼 화면)
-        function calculateAndShowSingleSummary(data) {
-            let totalBudget = data.baseBudget + data.io + (data.realizedProfit || 0);
-            let dropCost = (data.drops || []).reduce((sum, d) => sum + (d.price * d.qty), 0);
-            let dropQty = (data.drops || []).reduce((sum, d) => sum + d.qty, 0);
-            
-            let updownCost = data.totalQty * data.anchorPrice;
-            let totalCost = dropCost + updownCost;
-            let remainingCash = totalBudget - totalCost;
-            if (remainingCash < 0) remainingCash = 0;
-
-            let totalHolding = data.totalQty + dropQty;
-            let avgPrice = totalHolding > 0 ? (totalCost / totalHolding) : 0;
-            let evalValue = totalHolding * data.basePrice;
-            let profit = totalHolding > 0 ? (evalValue - totalCost) : 0;
-
-            document.getElementById('remainingCash').value = `$${remainingCash.toFixed(2)}`;
-            document.getElementById('totalHoldingCount').value = `${totalHolding} 주`;
-            document.getElementById('averagePrice').value = totalHolding > 0 ? `$${avgPrice.toFixed(2)}` : "-";
-            
-            let pEl = document.getElementById('totalProfitLoss');
-            pEl.value = `$${profit.toFixed(2)}`;
-            pEl.style.color = profit > 0 ? "#ef4444" : "#3b82f6";
-        }
-
-        // =====================================
-        // 통합 결과보기 및 세련된 장부 (다중 기법 합산)
-        // =====================================
-        window.updateIntegratedSummary = function() {
+        // 탭 2 계산 및 UI 업데이트
+        window.updateTab2Calculations = function() {
             const dateStr = document.getElementById('currentDate').value;
-            document.getElementById('summaryDateDisplay').textContent = dateStr;
-            
-            const tbody = document.getElementById('integratedSummaryBody');
-            tbody.innerHTML = '';
-            
-            let allData = window.dailyDatabase[dateStr];
-            if (!allData) return;
+            if (!dateStr || !window.dailyDatabase[dateStr]) return;
 
-            let sumQty = 0, sumEval = 0, sumProfit = 0, sumBudget = 0, sumCash = 0;
+            const closingPrice = parseFloat(document.getElementById('closingPriceInput').value) || 0;
+            const fxRate = parseFloat(document.getElementById('fxRateInput').value) || 0;
+
+            window.dailyDatabase[dateStr]._meta = { closingPrice, fxRate };
+
+            const tbody = document.getElementById('tab2TableBody');
+            const tfoot = document.getElementById('tab2TableFoot');
+            tbody.innerHTML = '';
+            tfoot.innerHTML = '';
+
+            let sumQty = 0, sumCash = 0, sumEval = 0, sumProfit = 0, sumBudget = 0;
 
             window.strategyNames.forEach(st => {
-                let d = allData[st];
-                if (!d) return;
+                let d = window.dailyDatabase[dateStr][st] || getDefaultStrategyData();
+                let qty = d.totalQty || 0;
+                let cost = qty * (d.anchorPrice || 0);
+                let budget = (d.baseBudget || 0) + (d.io || 0);
+                let cash = Math.max(0, budget - cost);
+                let evalVal = qty * closingPrice;
+                let profit = qty > 0 ? (evalVal - cost) : 0;
+                let returnRate = budget > 0 ? (profit / budget) * 100 : 0;
 
-                let tBudget = d.baseBudget + d.io + (d.realizedProfit || 0);
-                let dropQty = (d.drops || []).reduce((s, x) => s + x.qty, 0);
-                let dropCost = (d.drops || []).reduce((s, x) => s + (x.price * x.qty), 0);
-                
-                let totalH = d.totalQty + dropQty;
-                let totalCost = (d.totalQty * d.anchorPrice) + dropCost;
-                let cash = Math.max(0, tBudget - totalCost);
-                
-                let avgP = totalH > 0 ? totalCost / totalH : 0;
-                let evalV = totalH * d.basePrice;
-                let profit = totalH > 0 ? evalV - totalCost : 0;
-                let rate = tBudget > 0 ? (profit / tBudget) * 100 : 0;
-
-                sumQty += totalH;
-                sumEval += evalV;
-                sumProfit += profit;
-                sumBudget += tBudget;
+                sumQty += qty;
                 sumCash += cash;
+                sumEval += evalVal + cash;
+                sumProfit += profit;
+                sumBudget += budget;
+
+                let profitClass = profit >= 0 ? 'profit-text' : 'loss-text';
+                let sign = profit >= 0 ? '▲' : '▼';
 
                 tbody.innerHTML += `
                     <tr>
-                        <td style="font-weight:bold; color:#1e3a8a;">${st}</td>
-                        <td>${totalH}</td>
-                        <td>$${avgP.toFixed(2)}</td>
-                        <td>$${cash.toFixed(2)}</td>
-                        <td style="font-weight:bold;">$${evalV.toFixed(2)}</td>
-                        <td style="${profit >= 0 ? 'color:#ef4444;' : 'color:#3b82f6;'}">${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}</td>
-                        <td style="${rate >= 0 ? 'color:#ef4444;' : 'color:#3b82f6;'}">${rate >= 0 ? '▲' : '▼'}${Math.abs(rate).toFixed(2)}%</td>
-                        <td>$${d.baseBudget.toFixed(0)}</td>
+                        <td style="font-weight:bold;">${st}</td>
+                        <td>${qty}</td>
+                        <td>${(d.anchorPrice || 0).toFixed(2)}</td>
+                        <td>${cash.toFixed(2)}</td>
+                        <td>${(evalVal + cash).toFixed(2)}</td>
+                        <td class="${profitClass}">$${profit.toFixed(2)}</td>
+                        <td class="${profitClass}">${sign} ${Math.abs(returnRate).toFixed(1)}%</td>
+                        <td>${budget.toFixed(0)}</td>
                     </tr>
                 `;
             });
 
-            let tRate = sumBudget > 0 ? (sumProfit / sumBudget) * 100 : 0;
-            tbody.innerHTML += `
-                <tr style="background:#eff6ff; font-weight:bold; font-size:14px;">
+            let totalReturn = sumBudget > 0 ? (sumProfit / sumBudget) * 100 : 0;
+            let totalProfitClass = sumProfit >= 0 ? 'profit-text' : 'loss-text';
+            let totalSign = sumProfit >= 0 ? '▲' : '▼';
+
+            tfoot.innerHTML = `
+                <tr>
                     <td>합계</td>
-                    <td>${sumQty}주</td>
-                    <td>-</td>
-                    <td style="color:#10b981;">$${sumCash.toFixed(2)}</td>
-                    <td style="color:#1d4ed8;">$${sumEval.toFixed(2)}</td>
-                    <td style="${sumProfit >= 0 ? 'color:#ef4444;' : 'color:#3b82f6;'}">${sumProfit >= 0 ? '+' : ''}$${sumProfit.toFixed(2)}</td>
-                    <td style="${tRate >= 0 ? 'color:#ef4444;' : 'color:#3b82f6;'}">${tRate.toFixed(2)}%</td>
-                    <td>$${sumBudget.toFixed(0)}</td>
+                    <td>${sumQty}</td>
+                    <td>$${(sumQty > 0 ? closingPrice : 0).toFixed(2)}</td>
+                    <td>$${sumCash.toFixed(2)}</td>
+                    <td>$${sumEval.toFixed(2)}</td>
+                    <td class="${totalProfitClass}">$${sumProfit.toFixed(2)}</td>
+                    <td class="${totalProfitClass}">${totalSign} ${Math.abs(totalReturn).toFixed(1)}%</td>
+                    <td>$${sumBudget.toFixed(2)}</td>
                 </tr>
             `;
+
+            // 원화 환산
+            let krwTotal = sumEval * fxRate;
+            document.getElementById('krwFxRateSub').textContent = `(₩${fxRate.toLocaleString()} 기준)`;
+            document.getElementById('krwTotalDisplay').textContent = `₩${Math.round(krwTotal).toLocaleString()}`;
+
+            // 전일 대비 계산
+            let sortedDates = Object.keys(window.dailyDatabase).sort();
+            let prevDate = sortedDates.filter(d => d < dateStr).pop();
+            if (prevDate && window.dailyDatabase[prevDate]) {
+                let prevMeta = window.dailyDatabase[prevDate]._meta || { closingPrice: 107.34, fxRate: 1368.3 };
+                let prevSumEval = 0;
+                window.strategyNames.forEach(st => {
+                    let pd = window.dailyDatabase[prevDate][st] || {};
+                    let pQty = pd.totalQty || 0;
+                    let pCost = pQty * (pd.anchorPrice || 0);
+                    let pCash = Math.max(0, (pd.baseBudget || 0) - pCost);
+                    prevSumEval += (pQty * prevMeta.closingPrice) + pCash;
+                });
+                let prevKrwTotal = prevSumEval * prevMeta.fxRate;
+                let diffKrw = krwTotal - prevKrwTotal;
+                let diffRate = prevKrwTotal > 0 ? (diffKrw / prevKrwTotal) * 100 : 0;
+                let diffSign = diffKrw >= 0 ? '▲' : '▼';
+                let diffColor = diffKrw >= 0 ? '#ef4444' : '#2563eb';
+
+                document.getElementById('krwDiffDisplay').innerHTML = `전일 대비 <span style="color:${diffColor}">${diffSign} ₩${Math.abs(Math.round(diffKrw)).toLocaleString()} (${Math.abs(diffRate).toFixed(2)}%)</span>`;
+            } else {
+                document.getElementById('krwDiffDisplay').textContent = "전일 대비 기록 없음";
+            }
+
+            updateHistoryListUI();
         };
 
-        window.updateLedgerUI = function() {
-            const container = document.getElementById('ledgerHistoryContainer');
+        // 히스토리 리스트 및 필터링
+        window.toggleHistoryFilter = function() {
+            window.isFilterDateOnly = !window.isFilterDateOnly;
+            document.getElementById('filterToggleBtn').textContent = window.isFilterDateOnly ? "전체보기 전환" : "조회일만 보기 전환";
+            updateHistoryListUI();
+        };
+
+        function updateHistoryListUI() {
+            const container = document.getElementById('historyListContainer');
             container.innerHTML = '';
-            
+
+            const selectedDate = document.getElementById('currentDate').value;
             let dates = Object.keys(window.dailyDatabase).sort().reverse();
+
+            if (window.isFilterDateOnly) {
+                dates = dates.filter(d => d === selectedDate);
+            }
+
             if (dates.length === 0) {
-                container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">장부 기록이 없습니다.</div>';
+                container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">표시할 히스토리가 없습니다.</div>';
                 return;
             }
 
             dates.forEach(date => {
-                let allData = window.dailyDatabase[date];
-                let summaryHTML = '';
-                let tQty = 0, tEval = 0, tProfit = 0;
+                let data = window.dailyDatabase[date];
+                let meta = data._meta || { closingPrice: 0, fxRate: 0 };
+                let tQty = 0, tEvalUsd = 0, tProfitUsd = 0;
+                let bullets = '';
 
                 window.strategyNames.forEach(st => {
-                    if (!allData[st]) return;
-                    let d = allData[st];
-                    let dropQty = (d.drops || []).reduce((s, x) => s + x.qty, 0);
-                    let dropCost = (d.drops || []).reduce((s, x) => s + (x.price * x.qty), 0);
-                    let hQty = d.totalQty + dropQty;
-                    let cost = (d.totalQty * d.anchorPrice) + dropCost;
-                    let evalV = hQty * d.basePrice;
-                    let p = hQty > 0 ? evalV - cost : 0;
+                    let d = data[st] || {};
+                    let qty = d.totalQty || 0;
+                    let cost = qty * (d.anchorPrice || 0);
+                    let cash = Math.max(0, (d.baseBudget || 0) - cost);
+                    let evalVal = (qty * meta.closingPrice) + cash;
+                    let profit = qty > 0 ? (qty * meta.closingPrice - cost) : 0;
 
-                    tQty += hQty; tEval += evalV; tProfit += p;
-                    let avg = hQty > 0 ? cost/hQty : 0;
+                    tQty += qty;
+                    tEvalUsd += evalVal;
+                    tProfitUsd += profit;
 
-                    summaryHTML += `<li><b>${st}</b>: ${hQty}주 (평단: $${avg.toFixed(2)}, 총합: $${evalV.toFixed(2)})</li>`;
+                    bullets += `<li><b>${st}</b>: ${qty}주 (평단 $${(d.anchorPrice || 0).toFixed(2)}, 총합 $${evalVal.toFixed(2)})</li>`;
                 });
 
-                let sign = tProfit >= 0 ? '▲' : '▼';
-                let pColor = tProfit >= 0 ? '#ef4444' : '#3b82f6';
+                let tEvalKrw = Math.round(tEvalUsd * meta.fxRate);
+                let pSign = tProfitUsd >= 0 ? '▲' : '▼';
+                let pColor = tProfitUsd >= 0 ? '#ef4444' : '#2563eb';
 
                 container.innerHTML += `
                     <div class="history-card">
-                        <div class="history-header">
-                            <span class="history-date">📅 ${date}</span>
-                            <span class="history-stats" style="color:${pColor}">손익: $${Math.abs(tProfit).toFixed(2)} (${sign})</span>
+                        <div class="history-card-header">
+                            <span>📅 ${date} (종가: $${meta.closingPrice} | 환율: ₩${meta.fxRate})</span>
                         </div>
-                        <div class="history-sub">
-                            총 수량: <b>${tQty}주</b> | 통합 평가금액: <b>$${tEval.toFixed(2)}</b>
+                        <div class="history-card-body">
+                            <div><b>총 수량:</b> ${tQty}주 | <b>평가금액:</b> $${tEvalUsd.toFixed(2)} (₩${tEvalKrw.toLocaleString()})</div>
+                            <div><b>손익:</b> <span style="color:${pColor}; font-weight:bold;">$${tProfitUsd.toFixed(2)} (${pSign})</span></div>
+                            <ul class="history-bullets">${bullets}</ul>
                         </div>
-                        <ul class="history-bullets">
-                            ${summaryHTML}
-                        </ul>
                     </div>
                 `;
             });
+        }
+
+        window.saveCurrentLedgerToCloud = function() {
+            if (window.saveCloudDataInstant) {
+                window.saveCloudDataInstant();
+                alert("☁️ 일별 잔고 기록이 클라우드에 성공적으로 저장되었습니다!");
+            }
         };
 
-        // =====================================
-        // 기법 관리(추가/삭제)
-        // =====================================
         window.renderManageList = function() {
             const c = document.getElementById('manageListContainer');
             c.innerHTML = '';
-            
             window.strategyNames.forEach((st, idx) => {
                 c.innerHTML += `
                     <div class="manage-item">
-                        <span class="m-idx">#${idx+1}</span>
-                        <span class="m-name">${st}</span>
-                        <button class="btn-del" onclick="deleteStrategy('${st}')">🗑️ 삭제</button>
+                        <span><b>#${idx+1}</b> ${st}</span>
+                        <button onclick="deleteStrategy('${st}')" style="color:#ef4444; border:1px solid #fecaca; background:#fef2f2; padding:4px 10px; border-radius:4px; cursor:pointer;">삭제</button>
                     </div>
                 `;
             });
         };
 
         window.addNewStrategy = function() {
-            let n = document.getElementById('newStrategyName').value.trim();
-            if (!n) return alert('기법 이름을 입력하세요.');
-            if (window.strategyNames.includes(n)) return alert('이미 존재하는 기법 이름입니다.');
+            let name = document.getElementById('newStrategyName').value.trim();
+            if (!name) return alert("기법 이름을 입력하세요.");
+            if (window.strategyNames.includes(name)) return alert("이미 존재합니다.");
 
-            window.strategyNames.push(n);
-            let d = document.getElementById('currentDate').value;
-            if(window.dailyDatabase[d]) {
-                window.dailyDatabase[d][n] = getDefaultStrategyData();
-            }
-            
+            window.strategyNames.push(name);
             document.getElementById('newStrategyName').value = '';
-            renderDynamicTabs();
-            renderManageList();
-            if(window.saveCloudDataInstant) window.saveCloudDataInstant();
-            alert(`[${n}] 기법이 추가되었습니다.`);
+            window.renderDynamicTabs();
+            window.renderManageList();
+            window.onDateChange();
         };
 
         window.deleteStrategy = function(name) {
-            if (window.strategyNames.length <= 1) return alert('최소 1개의 기법은 유지해야 합니다.');
-            if (!confirm(`정말 [${name}] 기법을 삭제하시겠습니까?\n과거 장부 기록에서도 해당 탭이 보이지 않게 됩니다.`)) return;
-
+            if (window.strategyNames.length <= 1) return alert("최소 1개 이상 유지해야 합니다.");
             window.strategyNames = window.strategyNames.filter(s => s !== name);
             if (window.currentActiveStrategy === name) window.currentActiveStrategy = window.strategyNames[0];
-
-            renderDynamicTabs();
-            renderManageList();
-            updateIntegratedSummary();
-            if(window.saveCloudDataInstant) window.saveCloudDataInstant();
-        };
-
-        window.resetAllData = function() {
-            if (!confirm("🚨 경고: 모든 날짜의 장부와 추가된 기법 설정이 영구적으로 삭제됩니다.\n정말 초기화하시겠습니까?")) return;
-            window.dailyDatabase = {};
-            window.strategyNames = ['기본기법'];
-            window.currentActiveStrategy = '기본기법';
-            document.getElementById('currentDate').value = getTodayStr();
+            window.renderDynamicTabs();
+            window.renderManageList();
             window.onDateChange();
-            renderDynamicTabs();
-            renderManageList();
-            if(window.saveCloudDataInstant) window.saveCloudDataInstant();
-            alert("전체 초기화가 완료되었습니다.");
         };
 
-        // (기존 주문생성 및 이월 로직 연결용 껍데기 - 원본 수학 로직과 동일하게 작동)
-        window.generateTable = function() {
-            alert(`[${window.currentActiveStrategy}] 기법의 하단 주문 테이블이 생성되었습니다. (실제 주문 생성 로직은 원본 코드를 승계하여 작동합니다.)`);
-            // * 원본 코드의 generateTable() 수학 로직이 여기에 위치합니다. *
-        };
+        function updateIntegratedSummary() {
+            const dateStr = document.getElementById('currentDate').value;
+            const tbody = document.getElementById('integratedSummaryBody');
+            tbody.innerHTML = '';
 
-        window.processSettlement = function() {
-            alert("통합 장부 결산이 완료되어 다음 날짜로 이월되었습니다.");
-            // * 원본 코드의 processSettlement() 로직이 전역(모든 strategy)을 순회하며 다음날짜로 복사되도록 작동합니다. *
-        };
+            if (!window.dailyDatabase[dateStr]) return;
+            let meta = window.dailyDatabase[dateStr]._meta || { closingPrice: 0 };
+
+            window.strategyNames.forEach(st => {
+                let d = window.dailyDatabase[dateStr][st] || {};
+                let qty = d.totalQty || 0;
+                let cost = qty * (d.anchorPrice || 0);
+                let budget = (d.baseBudget || 0);
+                let cash = Math.max(0, budget - cost);
+                let evalVal = (qty * meta.closingPrice) + cash;
+                let profit = qty > 0 ? (qty * meta.closingPrice - cost) : 0;
+                let returnRate = budget > 0 ? (profit / budget) * 100 : 0;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td><b>${st}</b></td>
+                        <td>${qty}</td>
+                        <td>$${(d.anchorPrice || 0).toFixed(2)}</td>
+                        <td>$${cash.toFixed(2)}</td>
+                        <td>$${evalVal.toFixed(2)}</td>
+                        <td class="${profit >= 0 ? 'profit-text' : 'loss-text'}">$${profit.toFixed(2)}</td>
+                        <td class="${profit >= 0 ? 'profit-text' : 'loss-text'}">${returnRate.toFixed(1)}%</td>
+                    </tr>
+                `;
+            });
+        }
     </script>
 </body>
 </html>
