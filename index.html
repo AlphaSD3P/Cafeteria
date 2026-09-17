@@ -82,7 +82,6 @@
             window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
             window.strategyDates = {};
             
-            // 💡 초기 세팅 시 무조건 '오늘 날짜'로 고정 및 기법별 날짜 독립화
             const todayStr = getTodayStr();
             window.strategyNames.forEach(st => {
                 window.strategyDates[st] = todayStr;
@@ -433,7 +432,7 @@
         window.dailyDatabase = {};
         window.strategyNames = ['스', '윙', '장', '투'];
         window.currentActiveStrategy = '';
-        window.strategyDates = {}; // 💡 기법별 독립된 날짜 관리를 위한 객체
+        window.strategyDates = {}; 
         window.isFilterDateOnly = false;
         
         window.globalPendingBuys = [];
@@ -441,7 +440,6 @@
 
         function getTodayStr() {
             let d = new Date();
-            // 로컬 타임존 반영하여 YYYY-MM-DD 생성
             let offset = d.getTimezoneOffset() * 60000;
             let localISOTime = (new Date(d - offset)).toISOString().split('T')[0];
             return localISOTime;
@@ -475,7 +473,6 @@
                 if (st === window.currentActiveStrategy) btn.classList.add('active');
                 btn.onclick = () => {
                     window.currentActiveStrategy = st;
-                    // 💡 다른 기법 탭 클릭 시, 해당 기법이 기억하고 있던 날짜(없으면 오늘)로 세팅
                     document.getElementById('currentDate').value = window.strategyDates[st] || getTodayStr(); 
                     window.renderDynamicTabs();
                     window.onDateChange();
@@ -506,7 +503,6 @@
             const dateStr = document.getElementById('currentDate').value;
             if (!dateStr) return;
             
-            // 💡 현재 선택된 기법의 날짜를 독립적으로 업데이트
             if (window.currentActiveStrategy) {
                 window.strategyDates[window.currentActiveStrategy] = dateStr;
             }
@@ -1055,7 +1051,6 @@
                 }
             });
 
-            // 💡 결산 시 해당 기법의 독립된 날짜도 다음 날로 이월 처리
             window.strategyDates[window.currentActiveStrategy] = nextDateStr;
             document.getElementById('currentDate').value = nextDateStr;
             window.onDateChange();
@@ -1283,7 +1278,8 @@
                         <div style="display:flex; gap:5px; align-items:center;">
                             <button onclick="moveStrategy(${idx}, -1)" ${isFirst ? 'disabled style="opacity:0.3; cursor:default;"' : ''} style="border:1px solid #cbd5e1; background:#f8fafc; padding:3px 8px; border-radius:4px; cursor:pointer;">▲</button>
                             <button onclick="moveStrategy(${idx}, 1)" ${isLast ? 'disabled style="opacity:0.3; cursor:default;"' : ''} style="border:1px solid #cbd5e1; background:#f8fafc; padding:3px 8px; border-radius:4px; cursor:pointer;">▼</button>
-                            <button onclick="deleteStrategy('${st}')" style="color:#ef4444; border:1px solid #fecaca; background:#fef2f2; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:bold; margin-left:5px;">삭제</button>
+                            <button onclick="renameStrategy('${st}')" style="color:#3b82f6; border:1px solid #bfdbfe; background:#eff6ff; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:bold; margin-left:5px;">이름변경</button>
+                            <button onclick="deleteStrategy('${st}')" style="color:#ef4444; border:1px solid #fecaca; background:#fef2f2; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">삭제</button>
                         </div>
                     </div>
                 `;
@@ -1310,7 +1306,7 @@
             if (window.strategyNames.includes(name)) return alert("이미 존재하는 기법입니다.");
 
             window.strategyNames.push(name);
-            window.strategyDates[name] = getTodayStr(); // 💡 새 기법 추가 시 기본 날짜를 '오늘'로 세팅
+            window.strategyDates[name] = getTodayStr(); 
 
             if (window.strategyNames.length === 1) {
                 window.currentActiveStrategy = name;
@@ -1323,11 +1319,47 @@
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
         };
 
+        // 💡 새롭게 추가된 기법명 변경 기능
+        window.renameStrategy = function(oldName) {
+            let newName = prompt(`'${oldName}' 기법의 새 이름을 입력하세요:`, oldName);
+            if (!newName) return;
+            newName = newName.trim();
+            
+            if (newName === oldName) return;
+            if (!newName) return alert("기법 이름을 입력하세요.");
+            if (window.strategyNames.includes(newName)) return alert("이미 존재하는 기법 이름입니다.");
+
+            const idx = window.strategyNames.indexOf(oldName);
+            if (idx !== -1) window.strategyNames[idx] = newName;
+
+            for (let date in window.dailyDatabase) {
+                if (window.dailyDatabase[date][oldName]) {
+                    window.dailyDatabase[date][newName] = window.dailyDatabase[date][oldName];
+                    delete window.dailyDatabase[date][oldName];
+                }
+            }
+
+            if (window.strategyDates[oldName]) {
+                window.strategyDates[newName] = window.strategyDates[oldName];
+                delete window.strategyDates[oldName];
+            }
+
+            if (window.currentActiveStrategy === oldName) {
+                window.currentActiveStrategy = newName;
+            }
+
+            window.renderDynamicTabs();
+            window.renderManageList();
+            window.onDateChange();
+            if (window.saveCloudDataInstant) window.saveCloudDataInstant();
+            alert(`✅ 기법 이름이 '${oldName}'에서 '${newName}'(으)로 변경되었습니다.`);
+        };
+
         window.deleteStrategy = function(name) {
             if (!confirm(`'${name}' 기법을 삭제하시겠습니까?`)) return;
 
             window.strategyNames = window.strategyNames.filter(s => s !== name);
-            delete window.strategyDates[name]; // 날짜 메모리도 삭제
+            delete window.strategyDates[name]; 
 
             if (window.currentActiveStrategy === name) {
                 window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
