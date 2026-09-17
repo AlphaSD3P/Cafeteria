@@ -236,7 +236,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V48 - 기준운용금액 유지 및 자산 집계 완벽 보완)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V48 - 기준운용금액 및 입출금 연동 완벽 보완)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -540,19 +540,19 @@
                     
                     if (lastData && lastData[st]) {
                         let prev = lastData[st];
-                        // 🔥 [수정 핵심] 기준운용금액(baseBudget)은 전일 값을 그대로 유지(이월)하고 당일 입출금(io)만 0으로 초기화
-                        let carriedBudget = prev.baseBudget || 0;
+                        // 🛠️ 핵심 수정: 이전일 기준운용금액 + 이전일 입출금 합산을 새로운 '기준운용금액'으로 이월, 당일 입출금(io)은 0으로 초기화
+                        let carriedBudget = (prev.baseBudget || 0) + (prev.io || 0);
                         let carriedBasePrice = prev.basePrice || 0;
                         let carriedAnchorPrice = prev.anchorPrice || carriedBasePrice;
 
                         window.dailyDatabase[dateStr][st] = {
-                            baseBudget: carriedBudget,      // 최초 설정한 기준운용금액 고정 유지
-                            io: 0,                          // 당일 입출금은 매일 새로 입력받도록 초기화
+                            baseBudget: carriedBudget, 
+                            io: 0,                          
                             totalSteps: prev.totalSteps,
                             buyAmount: prev.buyAmount,
                             dropRate: prev.dropRate,
-                            basePrice: carriedBasePrice,     // 전일 종가 자동 상속
-                            anchorPrice: carriedAnchorPrice, // 기준가격 유지
+                            basePrice: carriedBasePrice,     
+                            anchorPrice: carriedAnchorPrice, 
                             currentStep: prev.currentStep,
                             totalQty: prev.totalQty,
                             drops: JSON.parse(JSON.stringify(prev.drops || []))
@@ -729,7 +729,7 @@
             
             let totalAsset = remainingCash + totalEvalValue;
 
-            // 🔥 [수익률 산출 공식] 총자산 - 기준운용금액(입출금 포함)
+            // 🛠️ 핵심 연동: 평가손익 및 총수익률이 기준운용금액(입출금 반영된 실질 원금)을 기준으로 정확하게 연동되도록 보완
             let totalProfitSum = totalAsset - effectiveBudget; 
             let totalReturn = effectiveBudget > 0 ? (totalProfitSum / effectiveBudget) * 100 : 0;
             if (Math.abs(totalReturn) < 0.01) totalReturn = 0;
@@ -952,6 +952,7 @@
             window.strategyNames.forEach(st => {
                 let currentStData = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
                 window.dailyDatabase[nextDateStr][st] = JSON.parse(JSON.stringify(currentStData));
+                window.dailyDatabase[nextDateStr][st].baseBudget = (currentStData.baseBudget || 0) + (currentStData.io || 0);
                 window.dailyDatabase[nextDateStr][st].io = 0; 
             });
 
@@ -1065,7 +1066,7 @@
             let currentBaseBudgetVal = parseFloat(document.getElementById('baseBudget').value) || 0;
             let currentIoVal = parseFloat(document.getElementById('dailyIo').value) || 0;
             
-            // 🔥 [결산 핵심 로직] 당일에 입출금이 있었다면 다음날 기준 운용금액(baseBudget)에 반영되어 누적됨
+            // 🛠️ 핵심 연동: 결산 시 당일 입출금(io)이 기준 운용금액에 완벽히 반영되어 다음날로 이월
             let nextBaseBudgetVal = currentBaseBudgetVal + currentIoVal;
 
             if(!window.dailyDatabase[currentDateStr]) {
@@ -1101,8 +1102,8 @@
             window.strategyNames.forEach(st => {
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
-                        baseBudget: nextBaseBudgetVal, // 입출금이 반영된 새로운 운용원금으로 이월
-                        io: 0,                           // 다음날 입출금은 다시 0으로 리셋
+                        baseBudget: nextBaseBudgetVal, 
+                        io: 0,                           
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
                         dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
@@ -1157,15 +1158,15 @@
                     let totalH = (d.totalQty || 0) + dropQty;
                     let totalCost = ((d.totalQty || 0) * (d.anchorPrice || 0)) + dropCost;
                     
-                    // 실질 운용 원금 = 기준운용금액 + 당일 입출금
+                    // 🛠️ 핵심 연동: 실질 운용 원금 = 기준운용금액 + 당일 입출금 합산으로 일관성 유지
                     let effectiveBudget = (d.baseBudget || 0) + (d.io || 0);
                     let cash = Math.max(0, effectiveBudget - totalCost);
                     
                     let strategyClosePrice = d.basePrice || 0; 
                     let evalVal = totalH * strategyClosePrice;
-                    let totalAsset = cash + evalVal; // 총자산 = 잔여달러 + 주식평가액
+                    let totalAsset = cash + evalVal; 
                     
-                    let profit = totalAsset - effectiveBudget; // 순수 손익 = 총자산 - 운용원금
+                    let profit = totalAsset - effectiveBudget; 
                     let returnRate = effectiveBudget > 0 ? (profit / effectiveBudget) * 100 : 0;
 
                     sumQty += totalH;
@@ -1412,10 +1413,8 @@
                 }
             }
 
-            if (window.strategyDates[oldName]) {
-                window.strategyDates[newName] = window.strategyDates[oldName];
-                delete window.strategyDates[oldName];
-            }
+           [cite: 2]window.strategyDates[newName] = window.strategyDates[oldName];
+            delete window.strategyDates[oldName];
 
             if (window.currentActiveStrategy === oldName) {
                 window.currentActiveStrategy = newName;
