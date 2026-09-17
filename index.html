@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V45 통합본)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V46 통합본)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -82,7 +82,7 @@
             window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
             window.strategyDates = {};
             
-            const todayStr = getTodayStr();
+            const todayStr = getValidBusinessDay(getTodayStr());
             window.strategyNames.forEach(st => {
                 window.strategyDates[st] = todayStr;
             });
@@ -167,6 +167,8 @@
         .btn-generate:hover { background-color: #16a34a; }
         .btn-nextday { background-color: #3b82f6; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; }
         .btn-nextday:hover { background-color: #2563eb; }
+        .btn-skipday { background-color: #64748b; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; width: 160px; }
+        .btn-skipday:hover { background-color: #475569; }
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
@@ -234,7 +236,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V45 - 기법별 데이터 완벽 격리 및 결산 이월 수정)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V46 - 주말/휴장 자동 스킵 및 날짜 건너뛰기 기능 추가)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -353,6 +355,7 @@
                 <div class="action-row">
                     <button class="btn-generate" onclick="generateTable()">⚡ 오늘자 주문 생성</button>
                     <button class="btn-nextday" onclick="processSettlement()">📝 다음날 장마감 종가</button>
+                    <button class="btn-skipday" onclick="skipDayWithoutTrade()">⏩ 휴장/스킵 (+1일)</button>
                 </div>
             </div>
 
@@ -445,6 +448,19 @@
             return localISOTime;
         }
 
+        // 주말(토, 일)을 자동 건너뛰고 영업일을 찾아주는 함수
+        function getValidBusinessDay(dateStr) {
+            let d = new Date(dateStr);
+            let day = d.getDay();
+            if (day === 6) { // 토요일이면 월요일(+2일)로 이동
+                d.setDate(d.getDate() + 2);
+            } else if (day === 0) { // 일요일이면 월요일(+1일)로 이동
+                d.setDate(d.getDate() + 1);
+            }
+            let offset = d.getTimezoneOffset() * 60000;
+            return (new Date(d - offset)).toISOString().split('T')[0];
+        }
+
         window.switchMainTab = function(index) {
             document.querySelectorAll('.main-tabs div').forEach((t, i) => t.classList.toggle('active', i === index));
             document.querySelectorAll('.tab-content').forEach((c, i) => c.classList.toggle('active-content', i === index));
@@ -476,7 +492,7 @@
                 if (st === window.currentActiveStrategy) btn.classList.add('active');
                 btn.onclick = () => {
                     window.currentActiveStrategy = st;
-                    document.getElementById('currentDate').value = window.strategyDates[st] || getTodayStr(); 
+                    document.getElementById('currentDate').value = getValidBusinessDay(window.strategyDates[st] || getTodayStr()); 
                     window.renderDynamicTabs();
                     window.onDateChange();
                     window.switchMainTab(0);
@@ -503,16 +519,23 @@
         }
 
         window.onDateChange = function() {
-            const dateStr = document.getElementById('currentDate').value;
+            let dateStr = document.getElementById('currentDate').value;
             if (!dateStr || !window.currentActiveStrategy) return;
             
+            // 주말 선택 시 자동으로 유효한 평일로 교정
+            let validDateStr = getValidBusinessDay(dateStr);
+            if (validDateStr !== dateStr) {
+                document.getElementById('currentDate').value = validDateStr;
+                dateStr = validDateStr;
+            }
+
             window.strategyDates[window.currentActiveStrategy] = dateStr;
 
             if (!window.dailyDatabase[dateStr]) {
                 window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 } };
             }
 
-            // 💡 기법별 데이터 독립 격리 생성 (이전 날짜 데이터 안전 상속)
+            // 기법별 데이터 독립 격리 생성 (이전 날짜 데이터 안전 상속)
             window.strategyNames.forEach(st => {
                 if (!window.dailyDatabase[dateStr][st]) {
                     let sortedDates = Object.keys(window.dailyDatabase).sort();
@@ -918,6 +941,39 @@
             document.getElementById('sellResultArea').innerHTML = sellHtml;
         };
 
+        // ⏩ 휴장/스킵 버튼: 거래 없이 그대로 다음 영업일 날짜로 데이터 복사 및 점프
+        window.skipDayWithoutTrade = function() {
+            const currentDateStr = document.getElementById('currentDate').value;
+            let dateObj = new Date(currentDateStr);
+            dateObj.setDate(dateObj.getDate() + 1);
+            
+            let nextDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+            nextDateStr = getValidBusinessDay(nextDateStr);
+
+            if (!window.dailyDatabase[currentDateStr]) {
+                alert("현재 날짜 데이터가 없습니다.");
+                return;
+            }
+
+            if (!window.dailyDatabase[nextDateStr]) {
+                window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
+            }
+
+            // 오늘 상태를 거래 체결 없이 그대로 다음 날짜로 복사 이월
+            window.strategyNames.forEach(st => {
+                let currentStData = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
+                window.dailyDatabase[nextDateStr][st] = JSON.parse(JSON.stringify(currentStData));
+                window.dailyDatabase[nextDateStr][st].io = 0; // 입출금은 초기화
+            });
+
+            window.strategyDates[window.currentActiveStrategy] = nextDateStr;
+            document.getElementById('currentDate').value = nextDateStr;
+            window.onDateChange();
+
+            if (window.saveCloudDataInstant) window.saveCloudDataInstant();
+            alert(`⏩ 휴장일 스킵 완료: 거래 없이 상태가 다음 영업일 [ ${nextDateStr} ]로 연장(복사)되었습니다.`);
+        };
+
         window.processSettlement = function() {
             if (window.globalPendingBuys.length === 0 && window.globalPendingSells.length === 0) {
                 alert("먼저 [오늘자 주문 생성]을 눌러 주문을 세팅해야 합니다.");
@@ -942,9 +998,7 @@
             let oldAnchorPrice = parseFloat(document.getElementById('anchorPrice').value) || currentDayRealBasePrice;
             let oldQty = parseInt(document.getElementById('totalQty').value);
 
-            // 당일 원본 떨법 상태 보존용
             let rawDropsOnCurrentDay = getDropsFromScreen();
-
             let currentDropHoldings = [];
             rawDropsOnCurrentDay.forEach(d => {
                 currentDropHoldings.push({price: d.price, qty: d.qty, date: d.date, matched: false});
@@ -959,7 +1013,6 @@
             let isUpDownBought = false;
             let isUpDownSold = false;
 
-            // 매수 체결 확인
             window.globalPendingBuys.forEach(order => {
                 if (nextClosePrice <= order.price) {
                     if (order.category === 'updown') {
@@ -971,7 +1024,6 @@
                 }
             });
 
-            // 매도 체결 확인
             window.globalPendingSells.forEach(order => {
                 if (nextClosePrice >= order.price) {
                     if (order.category === 'updown') {
@@ -1031,7 +1083,6 @@
                 window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
             }
 
-            // 1️⃣ [수정 포인트] 당일 데이터에는 체결 전 원래 입력값 상태를 온전히 유지
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
                 baseBudget: currentBaseBudgetVal,
                 io: parseFloat(document.getElementById('dailyIo').value) || 0,
@@ -1046,19 +1097,20 @@
                 drops: JSON.parse(JSON.stringify(rawDropsOnCurrentDay)) 
             };
 
-            // 다음 날 날짜 계산
             let dateObj = new Date(currentDateStr);
             dateObj.setDate(dateObj.getDate() + 1);
             const yyyy = dateObj.getFullYear();
             const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
             const dd = String(dateObj.getDate()).padStart(2, '0');
-            const nextDateStr = `${yyyy}-${mm}-${dd}`;
+            let nextDateStr = `${yyyy}-${mm}-${dd}`;
+            
+            // 다음 날이 주말이면 월요일로 자동 점프
+            nextDateStr = getValidBusinessDay(nextDateStr);
 
             if (!window.dailyDatabase[nextDateStr]) {
                 window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
             }
 
-            // 2️⃣ [수정 포인트] 체결 완료된 새로운 상태는 '다음 날' 데이터에만 이월
             window.strategyNames.forEach(st => {
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
@@ -1093,7 +1145,7 @@
             
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
 
-            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료!\n- 당일 장부는 체결 전 상태로 보존됩니다.\n- 체결 내역($${nextClosePrice})은 다음날 [ ${nextDateStr} ] 장부로 이월되었습니다.${absorptionMsg}`);
+            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료!\n- 당일 장부는 체결 전 상태로 보존됩니다.\n- 체결 내역($${nextClosePrice})은 다음날 영업일 [ ${nextDateStr} ] 장부로 이월되었습니다.${absorptionMsg}`);
         };
 
         window.updateTab1Calculations = function() {
@@ -1280,7 +1332,7 @@
 
             let sortedDates = Object.keys(window.dailyDatabase).sort();
             let targetDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : getTodayStr();
-            document.getElementById('currentDate').value = targetDate;
+            document.getElementById('currentDate').value = getValidBusinessDay(targetDate);
 
             window.onDateChange();
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
@@ -1339,7 +1391,7 @@
             if (window.strategyNames.includes(name)) return alert("이미 존재하는 기법입니다.");
 
             window.strategyNames.push(name);
-            const todayStr = getTodayStr();
+            const todayStr = getValidBusinessDay(getTodayStr());
             window.strategyDates[name] = todayStr; 
 
             if (!window.dailyDatabase[todayStr]) {
@@ -1414,7 +1466,7 @@
             window.strategyDates = {};
             window.currentActiveStrategy = '';
             
-            const todayStr = getTodayStr();
+            const todayStr = getValidBusinessDay(getTodayStr());
             document.getElementById('currentDate').value = todayStr;
             document.getElementById('currentDateTab1').value = todayStr;
             
