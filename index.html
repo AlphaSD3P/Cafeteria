@@ -67,7 +67,7 @@
                 if (docSnap.exists()) {
                     const cloudVal = docSnap.data();
                     window.dailyDatabase = cloudVal.dailyDatabase || {};
-                    window.strategyNames = cloudVal.strategyNames || ['스', '윙', '장', '투'];
+                    window.strategyNames = cloudVal.strategyNames !== undefined ? cloudVal.strategyNames : ['스', '윙', '장', '투'];
 
                     for (let date in window.dailyDatabase) {
                         if (window.dailyDatabase[date].baseBudget !== undefined) {
@@ -90,7 +90,7 @@
             let targetDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : getTodayStr();
             document.getElementById('currentDate').value = targetDate;
             
-            window.currentActiveStrategy = window.strategyNames[0];
+            window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
             window.renderDynamicTabs();
             window.onDateChange();
         }
@@ -134,7 +134,7 @@
         h2 { color: #1e3a8a; margin: 0 0 6px 0; font-size: 24px; }
         .subtitle { color: #64748b; font-size: 13px; }
         
-        .strategy-tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px; }
+        .strategy-tabs { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px; min-height: 32px; align-items: center; }
         .strategy-tabs div { padding: 6px 16px; background: #f1f5f9; border-radius: 20px; color: #64748b; font-weight: bold; cursor: pointer; font-size: 13px; border: 1px solid #cbd5e1; }
         .strategy-tabs .active { background: #1e3a8a; color: white; border-color: #1e3a8a; }
         
@@ -221,7 +221,7 @@
         <!-- 상단 기법 구분 탭 -->
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
         
-        <!-- 메인 메뉴 탭 (통합결과보기 제거) -->
+        <!-- 메인 메뉴 탭 -->
         <div class="main-tabs">
             <div class="active" onclick="switchMainTab(0)">📝 매매 입력 (자동주문)</div>
             <div onclick="switchMainTab(1)">📉 잔고&일별기록</div>
@@ -369,10 +369,21 @@
             if (index === 2) renderManageList();
         };
 
-        // 상단 기법 탭 렌더링 및 클릭 이벤트 (바로 해당 기법 매매입력 창으로 전환)
+        // 상단 기법 탭 렌더링
         window.renderDynamicTabs = function() {
             const container = document.getElementById('strategyTabsContainer');
             container.innerHTML = '';
+            
+            if (!window.strategyNames || window.strategyNames.length === 0) {
+                container.innerHTML = '<div style="color:#94a3b8; font-size:13px; text-align:center; width:100%;">등록된 매매기법이 없습니다. [기법 관리] 탭에서 기법을 추가하세요.</div>';
+                document.getElementById('currentStrategyNameDisplay').textContent = "없음";
+                return;
+            }
+
+            if (!window.strategyNames.includes(window.currentActiveStrategy)) {
+                window.currentActiveStrategy = window.strategyNames[0];
+            }
+
             window.strategyNames.forEach(st => {
                 const btn = document.createElement('div');
                 btn.textContent = st;
@@ -381,11 +392,11 @@
                     window.currentActiveStrategy = st;
                     window.renderDynamicTabs();
                     window.onDateChange();
-                    window.switchMainTab(0); // 기법 탭 클릭 시 매매 입력 화면으로 이동
+                    window.switchMainTab(0);
                 };
                 container.appendChild(btn);
             });
-            document.getElementById('currentStrategyNameDisplay').textContent = window.currentActiveStrategy;
+            document.getElementById('currentStrategyNameDisplay').textContent = window.currentActiveStrategy || "없음";
         };
 
         function getDefaultStrategyData() {
@@ -420,7 +431,11 @@
             document.getElementById('closingPriceInput').value = meta.closingPrice || 107.34;
             document.getElementById('fxRateInput').value = meta.fxRate || 1368.3;
 
-            applyDataToForm(window.dailyDatabase[dateStr][window.currentActiveStrategy]);
+            if (window.currentActiveStrategy && window.dailyDatabase[dateStr][window.currentActiveStrategy]) {
+                applyDataToForm(window.dailyDatabase[dateStr][window.currentActiveStrategy]);
+            } else {
+                applyDataToForm(getDefaultStrategyData());
+            }
             updateTab1Calculations();
         };
 
@@ -456,6 +471,7 @@
         }
 
         window.addDropRow = function() {
+            if (!window.currentActiveStrategy) return alert("기법을 먼저 선택해주세요.");
             const dateStr = document.getElementById('currentDate').value;
             let stData = window.dailyDatabase[dateStr][window.currentActiveStrategy];
             if (!stData.drops) stData.drops = [];
@@ -465,6 +481,7 @@
         };
 
         window.removeDropRow = function(idx) {
+            if (!window.currentActiveStrategy) return;
             const dateStr = document.getElementById('currentDate').value;
             let stData = window.dailyDatabase[dateStr][window.currentActiveStrategy];
             if (stData.drops) stData.drops.splice(idx, 1);
@@ -504,19 +521,19 @@
 
         function calculateSingleSummary() {
             const dateStr = document.getElementById('currentDate').value;
-            if(!window.dailyDatabase[dateStr]) return;
-            let d = window.dailyDatabase[dateStr][window.currentActiveStrategy];
+            if(!window.dailyDatabase[dateStr] || !window.currentActiveStrategy) return;
+            let d = window.dailyDatabase[dateStr][window.currentActiveStrategy] || getDefaultStrategyData();
             let closingPrice = parseFloat(document.getElementById('closingPriceInput').value) || d.anchorPrice || 0;
 
             let totalBudget = (d.baseBudget || 0) + (d.io || 0);
             let dropCost = (d.drops || []).reduce((sum, x) => sum + (x.price * x.qty), 0);
             let dropQty = (d.drops || []).reduce((sum, x) => sum + x.qty, 0);
             
-            let updownCost = d.totalQty * d.anchorPrice;
+            let updownCost = (d.totalQty || 0) * (d.anchorPrice || 0);
             let totalCost = dropCost + updownCost;
             let cash = Math.max(0, totalBudget - totalCost);
 
-            let totalHolding = d.totalQty + dropQty;
+            let totalHolding = (d.totalQty || 0) + dropQty;
             let avgPrice = totalHolding > 0 ? (totalCost / totalHolding) : 0;
             let evalValue = totalHolding * closingPrice;
             let profit = totalHolding > 0 ? (evalValue - totalCost) : 0;
@@ -531,6 +548,7 @@
         }
 
         window.generateOrders = function() {
+            if (!window.currentActiveStrategy) return alert("선택된 기법이 없습니다.");
             const dateStr = document.getElementById('currentDate').value;
             let d = window.dailyDatabase[dateStr][window.currentActiveStrategy];
             if (!d) return;
@@ -639,43 +657,47 @@
 
             let sumQty = 0, sumCash = 0, sumEval = 0, sumProfit = 0, sumBudget = 0;
 
-            window.strategyNames.forEach(st => {
-                let d = window.dailyDatabase[dateStr][st] || getDefaultStrategyData();
-                let dropQty = (d.drops || []).reduce((s, x) => s + x.qty, 0);
-                let dropCost = (d.drops || []).reduce((s, x) => s + (x.price * x.qty), 0);
-                
-                let totalH = (d.totalQty || 0) + dropQty;
-                let totalCost = ((d.totalQty || 0) * (d.anchorPrice || 0)) + dropCost;
-                let budget = (d.baseBudget || 0) + (d.io || 0);
-                let cash = Math.max(0, budget - totalCost);
-                
-                let avgP = totalH > 0 ? totalCost / totalH : 0;
-                let evalVal = totalH * closingPrice;
-                let profit = totalH > 0 ? (evalVal - totalCost) : 0;
-                let returnRate = budget > 0 ? (profit / budget) * 100 : 0;
+            if (!window.strategyNames || window.strategyNames.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="color:#94a3b8; padding:20px;">등록된 매매기법이 없습니다.</td></tr>';
+            } else {
+                window.strategyNames.forEach(st => {
+                    let d = window.dailyDatabase[dateStr][st] || getDefaultStrategyData();
+                    let dropQty = (d.drops || []).reduce((s, x) => s + x.qty, 0);
+                    let dropCost = (d.drops || []).reduce((s, x) => s + (x.price * x.qty), 0);
+                    
+                    let totalH = (d.totalQty || 0) + dropQty;
+                    let totalCost = ((d.totalQty || 0) * (d.anchorPrice || 0)) + dropCost;
+                    let budget = (d.baseBudget || 0) + (d.io || 0);
+                    let cash = Math.max(0, budget - totalCost);
+                    
+                    let avgP = totalH > 0 ? totalCost / totalH : 0;
+                    let evalVal = totalH * closingPrice;
+                    let profit = totalH > 0 ? (evalVal - totalCost) : 0;
+                    let returnRate = budget > 0 ? (profit / budget) * 100 : 0;
 
-                sumQty += totalH;
-                sumCash += cash;
-                sumEval += evalVal + cash;
-                sumProfit += profit;
-                sumBudget += budget;
+                    sumQty += totalH;
+                    sumCash += cash;
+                    sumEval += evalVal + cash;
+                    sumProfit += profit;
+                    sumBudget += budget;
 
-                let profitClass = profit >= 0 ? 'profit-text' : 'loss-text';
-                let sign = profit >= 0 ? '▲' : '▼';
+                    let profitClass = profit >= 0 ? 'profit-text' : 'loss-text';
+                    let sign = profit >= 0 ? '▲' : '▼';
 
-                tbody.innerHTML += `
-                    <tr>
-                        <td style="font-weight:bold;">${st}</td>
-                        <td>${totalH}</td>
-                        <td>$${avgP.toFixed(2)}</td>
-                        <td>$${cash.toFixed(2)}</td>
-                        <td>$${(evalVal + cash).toFixed(2)}</td>
-                        <td class="${profitClass}">$${profit.toFixed(2)}</td>
-                        <td class="${profitClass}">${sign} ${Math.abs(returnRate).toFixed(1)}%</td>
-                        <td>$${budget.toFixed(0)}</td>
-                    </tr>
-                `;
-            });
+                    tbody.innerHTML += `
+                        <tr>
+                            <td style="font-weight:bold;">${st}</td>
+                            <td>${totalH}</td>
+                            <td>$${avgP.toFixed(2)}</td>
+                            <td>$${cash.toFixed(2)}</td>
+                            <td>$${(evalVal + cash).toFixed(2)}</td>
+                            <td class="${profitClass}">$${profit.toFixed(2)}</td>
+                            <td class="${profitClass}">${sign} ${Math.abs(returnRate).toFixed(1)}%</td>
+                            <td>$${budget.toFixed(0)}</td>
+                        </tr>
+                    `;
+                });
+            }
 
             let totalReturn = sumBudget > 0 ? (sumProfit / sumBudget) * 100 : 0;
             let totalProfitClass = sumProfit >= 0 ? 'profit-text' : 'loss-text';
@@ -732,7 +754,6 @@
             updateHistoryListUI();
         };
 
-        // 히스토리 목록 및 삭제 기능 구현
         function updateHistoryListUI() {
             const container = document.getElementById('historyListContainer');
             container.innerHTML = '';
@@ -793,7 +814,6 @@
             });
         }
 
-        // 특정 날짜 히스토리 삭제
         window.deleteHistoryDate = function(dateStr) {
             if (!confirm(`📅 [${dateStr}] 기록을 완전히 삭제하시겠습니까?`)) return;
 
@@ -814,17 +834,45 @@
             }
         };
 
+        // 기법 관리 리스트 렌더링 (순서 변경 버튼 추가)
         window.renderManageList = function() {
             const c = document.getElementById('manageListContainer');
             c.innerHTML = '';
+            
+            if (window.strategyNames.length === 0) {
+                c.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:15px;">등록된 기법이 없습니다. 아래에서 새 기법을 추가해주세요.</div>';
+                return;
+            }
+
             window.strategyNames.forEach((st, idx) => {
+                const isFirst = idx === 0;
+                const isLast = idx === window.strategyNames.length - 1;
                 c.innerHTML += `
                     <div class="manage-item">
                         <span><b>#${idx+1}</b> ${st}</span>
-                        <button onclick="deleteStrategy('${st}')" style="color:#ef4444; border:1px solid #fecaca; background:#fef2f2; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">삭제</button>
+                        <div style="display:flex; gap:5px; align-items:center;">
+                            <button onclick="moveStrategy(${idx}, -1)" ${isFirst ? 'disabled style="opacity:0.3; cursor:default;"' : ''} style="border:1px solid #cbd5e1; background:#f8fafc; padding:3px 8px; border-radius:4px; cursor:pointer;">▲</button>
+                            <button onclick="moveStrategy(${idx}, 1)" ${isLast ? 'disabled style="opacity:0.3; cursor:default;"' : ''} style="border:1px solid #cbd5e1; background:#f8fafc; padding:3px 8px; border-radius:4px; cursor:pointer;">▼</button>
+                            <button onclick="deleteStrategy('${st}')" style="color:#ef4444; border:1px solid #fecaca; background:#fef2f2; padding:4px 10px; border-radius:4px; cursor:pointer; font-weight:bold; margin-left:5px;">삭제</button>
+                        </div>
                     </div>
                 `;
             });
+        };
+
+        // 기법 순서 이동
+        window.moveStrategy = function(index, direction) {
+            let targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= window.strategyNames.length) return;
+
+            let temp = window.strategyNames[index];
+            window.strategyNames[index] = window.strategyNames[targetIndex];
+            window.strategyNames[targetIndex] = temp;
+
+            window.renderDynamicTabs();
+            window.renderManageList();
+            window.updateTab1Calculations();
+            if (window.saveCloudDataInstant) window.saveCloudDataInstant();
         };
 
         // 매매기법 추가
@@ -834,6 +882,10 @@
             if (window.strategyNames.includes(name)) return alert("이미 존재하는 기법입니다.");
 
             window.strategyNames.push(name);
+            if (window.strategyNames.length === 1) {
+                window.currentActiveStrategy = name;
+            }
+
             document.getElementById('newStrategyName').value = '';
             window.renderDynamicTabs();
             window.renderManageList();
@@ -841,14 +893,13 @@
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
         };
 
-        // 매매기법 삭제 (삭제 후 데이터 반영 및 저장)
+        // 매매기법 삭제
         window.deleteStrategy = function(name) {
-            if (window.strategyNames.length <= 1) return alert("최소 1개 이상의 기법은 유지되어야 합니다.");
             if (!confirm(`'${name}' 기법을 삭제하시겠습니까?`)) return;
 
             window.strategyNames = window.strategyNames.filter(s => s !== name);
             if (window.currentActiveStrategy === name) {
-                window.currentActiveStrategy = window.strategyNames[0];
+                window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
             }
 
             window.renderDynamicTabs();
@@ -857,15 +908,16 @@
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
         };
 
+        // 전체 데이터 초기화 (기본값 설정 없이 완전 비우기)
         window.resetAllData = function() {
             if(!confirm("모든 날짜의 장부와 데이터가 초기화됩니다. 진행하시겠습니까?")) return;
             window.dailyDatabase = {};
-            window.strategyNames = ['스', '윙', '장', '투'];
-            window.currentActiveStrategy = '스';
+            window.strategyNames = [];
+            window.currentActiveStrategy = '';
             document.getElementById('currentDate').value = getTodayStr();
-            window.onDateChange();
             window.renderDynamicTabs();
             window.renderManageList();
+            window.onDateChange();
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
             alert("초기화가 완료되었습니다.");
         };
