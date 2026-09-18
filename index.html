@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V66 추가 1줄 합산 및 방어 묶음 간격판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V63 잔고테이블 손익 색상 스타일링판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -173,7 +173,7 @@
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #ef4444; padding-left: 8px; }
+        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; }
         .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #3b82f6; padding-left: 8px; }
         
         .order-table { width: 100%; border-collapse: collapse; text-align: center; background: white; margin-bottom: 8px; font-size: 12px; }
@@ -198,6 +198,7 @@
         .balance-table td { padding: 10px; border: 1px solid #e2e8f0; color: #334155; }
         .balance-table tfoot tr { background-color: #f1f5f9; font-weight: bold; }
         
+        /* 손익 스타일 클래스 */
         .profit-text { color: #ef4444 !important; font-weight: bold; }
         .loss-text { color: #2563eb !important; font-weight: bold; }
 
@@ -238,7 +239,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V66 - 추가 1줄 합산 및 방어 묶음 간격판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V63 - 잔고테이블 손익 색상 스타일링판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -364,13 +365,7 @@
 
             <div class="orders-container">
                 <div class="result-section">
-                    <div class="result-title-buy">
-                        <span>생성된 매수 주문 (LOC) 미리보기</span>
-                        <div style="display: flex; gap: 10px; font-size: 11px; font-weight: normal; align-items: center;">
-                            <span>추가그리드: <input type="number" id="gridAddQty" value="1" min="1" oninput="autoSaveState()" style="width: 45px; text-align: center; padding: 2px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px;"></span>
-                            <span>방어그리드: <input type="number" id="gridDefenseQty" value="1" min="1" oninput="autoSaveState()" style="width: 45px; text-align: center; padding: 2px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px;"></span>
-                        </div>
-                    </div>
+                    <div class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</div>
                     <div id="buyResultArea">
                         <div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
                     </div>
@@ -518,8 +513,6 @@
                 totalSteps: 0, 
                 buyAmount: 0, 
                 dropRate: 0, 
-                gridAddQty: 1,
-                gridDefenseQty: 1,
                 basePrice: 0,
                 anchorPrice: 0, 
                 currentStep: 0, 
@@ -566,8 +559,6 @@
                             totalSteps: prev.totalSteps,
                             buyAmount: prev.buyAmount,
                             dropRate: prev.dropRate,
-                            gridAddQty: prev.gridAddQty !== undefined ? prev.gridAddQty : 1,
-                            gridDefenseQty: prev.gridDefenseQty !== undefined ? prev.gridDefenseQty : 1,
                             basePrice: carriedBasePrice,     
                             anchorPrice: carriedAnchorPrice, 
                             currentStep: prev.currentStep,
@@ -602,8 +593,6 @@
             document.getElementById('totalStepsSetting').value = data.totalSteps || 0;
             document.getElementById('buyAmount').value = data.buyAmount !== undefined ? data.buyAmount : 0;
             document.getElementById('dropRate').value = data.dropRate || 0;
-            document.getElementById('gridAddQty').value = data.gridAddQty !== undefined ? data.gridAddQty : 1;
-            document.getElementById('gridDefenseQty').value = data.gridDefenseQty !== undefined ? data.gridDefenseQty : 1;
             document.getElementById('basePrice').value = data.basePrice || 0;
             document.getElementById('anchorPrice').value = data.anchorPrice !== undefined ? data.anchorPrice : 0;
             document.getElementById('currentStep').value = data.currentStep || 0;
@@ -674,8 +663,6 @@
                 totalSteps: parseInt(document.getElementById('totalStepsSetting').value) || 0,
                 buyAmount: parseFloat(document.getElementById('buyAmount').value) || 0,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0,
-                gridAddQty: parseInt(document.getElementById('gridAddQty').value) || 1,
-                gridDefenseQty: parseInt(document.getElementById('gridDefenseQty').value) || 1,
                 basePrice: parseFloat(document.getElementById('basePrice').value) || 0,
                 anchorPrice: anchorPriceVal,
                 currentStep: parseInt(document.getElementById('currentStep').value) || 0,
@@ -781,9 +768,6 @@
             const currentStep = parseInt(document.getElementById('currentStep').value);
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
-            
-            const gridAddQty = parseInt(document.getElementById('gridAddQty').value) || 1;
-            const gridDefenseQty = parseInt(document.getElementById('gridDefenseQty').value) || 1;
 
             if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
@@ -825,6 +809,29 @@
                 }
             }
 
+            // 1. 떨법 매수 로직 (종가 - 0.01)
+            if (summary.remainingSteps >= 2.0) {
+                let pA = basePrice - 0.01;
+                let qA = Math.floor(buyAmount / pA);
+                if (pA >= limitPrice && qA > 0) {
+                    addOrder('A', '떨법', pA, qA);
+                    let nA = qA + 1;
+                    while (true) {
+                        let p = buyAmount / nA;
+                        if (p < limitPrice || nA > 10000) break;
+                        if (p < pA) {
+                            let percentText = getDropPercentText(p, basePrice);
+                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
+                                percentText = `추가 (0.0%)`;
+                            }
+                            addOrder('A', percentText, p, 1);
+                        }
+                        nA++;
+                    }
+                }
+            }
+
+            // 2. 업다운 매수 로직
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -836,68 +843,28 @@
                 let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
                 pB = effectiveAnchor * (1 - (dropRate * effectiveStepForOrder) / 100);
             }
-            let qB = pB > 0 ? Math.floor(buyAmount / pB) : 0;
-
-            let pA = basePrice - 0.01;
-            let qA = pA > 0 ? Math.floor(buyAmount / pA) : 0;
-
-            // 1. 떨법 매수 로직 (종가 - 0.01)
-            if (summary.remainingSteps >= 2.0) {
-                if (pA >= limitPrice && qA > 0) {
-                    addOrder('A', '떨법', pA, qA);
-                    
-                    // 🔥 [개선 1] 업다운과 떨법 수량의 차이(diff)를 1줄로 딱 합산해서 표시
-                    let diffQtyA = Math.abs(qA - qB);
-                    if (diffQtyA > 0 && qA > qB) {
-                        let percentText = getDropPercentText(pA, basePrice);
-                        if(currentStep === 0 && Math.abs(pA - basePrice) < 0.01) {
-                            percentText = `추가 (0.0%)`;
-                        }
-                        addOrder('A', percentText, pA, diffQtyA);
-                    }
-
-                    // 이후 그리드 간격 (gridAddQty 적용)
-                    let nA = qA + 1;
-                    while (true) {
-                        let p = buyAmount / nA;
-                        if (p < limitPrice || nA > 10000) break;
-                        if (p < pA) {
-                            let percentText = getDropPercentText(p, basePrice);
-                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
-                                percentText = `추가 (0.0%)`;
-                            }
-                            let assignQty = gridAddQty > 0 ? gridAddQty : 1;
-                            addOrder('A', percentText, p, assignQty);
-                        }
-                        nA++;
-                    }
-                }
-            }
-
-            // 2. 업다운 매수 로직
+            
             let maxQtyByCash = pB > 0 ? Math.floor(summary.remainingCash / pB) : 0;
+            let qB = Math.floor(buyAmount / pB);
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
                 addOrder('B', '업다운', pB, qB);
                 
-                // 🔥 [개선 2] 방어그리드 설정값(gridDefenseQty)에 따라 2개 또는 3개씩 묶어서 내려가도록 적용
-                let stepQtyB = gridDefenseQty > 0 ? gridDefenseQty : 1;
-
                 let nB = qB + 1;
                 while (true) {
                     let p = buyAmount / nB;
                     let cashCheck = Math.floor(summary.remainingCash / p);
                     if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
                     if (p < pB) {
-                        addOrder('B', getDropPercentText(p, basePrice), p, stepQtyB);
+                        addOrder('B', getDropPercentText(p, basePrice), p, 1);
                     }
                     nB++;
                 }
             }
 
             let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 추가 1줄 합산 및 방어그리드(${gridDefenseQty}개) 설정이 반영되었습니다.</div>`;
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 모든 매수 주문은 종가 기준 LOC로 진행되며, 업다운 하락간격은 [업다운 회차(${currentStep}) + 떨법 물량 개수(${currentDropsCount})]를 합산하여 적용됩니다.</div>`;
 
             if (finalOrders.length > 0) {
                 buyHtml += `<table class="order-table">
@@ -1173,8 +1140,6 @@
                 totalSteps: totalStepsLimit,
                 buyAmount: buyAmountPerStep,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
-                gridAddQty: parseInt(document.getElementById('gridAddQty').value) || 1,
-                gridDefenseQty: parseInt(document.getElementById('gridDefenseQty').value) || 1,
                 basePrice: currentDayRealBasePrice,
                 anchorPrice: oldAnchorPrice,
                 currentStep: oldStep,
@@ -1205,8 +1170,6 @@
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
                         dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
-                        gridAddQty: parseInt(document.getElementById('gridAddQty').value) || 1,
-                        gridDefenseQty: parseInt(document.getElementById('gridDefenseQty').value) || 1,
                         basePrice: nextClosePrice, 
                         anchorPrice: newAnchorPrice,
                         currentStep: newStep,
