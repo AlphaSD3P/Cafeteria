@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V62 떨법 칸 디자인 및 높이 확장판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V63 잔고테이블 손익 색상 스타일링판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -197,8 +197,10 @@
         .balance-table th { background-color: #f8fafc; padding: 10px; border: 1px solid #e2e8f0; color: #475569; font-weight: bold; }
         .balance-table td { padding: 10px; border: 1px solid #e2e8f0; color: #334155; }
         .balance-table tfoot tr { background-color: #f1f5f9; font-weight: bold; }
-        .profit-text { color: #ef4444; font-weight: bold; }
-        .loss-text { color: #2563eb; font-weight: bold; }
+        
+        /* 손익 스타일 클래스 */
+        .profit-text { color: #ef4444 !important; font-weight: bold; }
+        .loss-text { color: #2563eb !important; font-weight: bold; }
 
         .krw-card { background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .krw-title { font-size: 15px; font-weight: bold; color: #166534; }
@@ -237,7 +239,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V62 - 떨법 칸 파스텔톤 정돈 및 높이 확장판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V63 - 잔고테이블 손익 색상 스타일링판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -344,7 +346,7 @@
                         </div>
                     </div>
 
-                    <!-- 현재 보유 중인 떨법 물량 (높이를 늘려 기본 8개까지 표시, 파스텔톤 디자인 적용) -->
+                    <!-- 현재 보유 중인 떨법 물량 -->
                     <div class="card-box">
                         <div class="card-title">
                             <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
@@ -1241,8 +1243,8 @@
                     sumProfit += profit;
                     sumBudget += effectiveBudget;
 
-                    let profitClass = profit >= 0 ? 'profit-text' : 'loss-text';
-                    let sign = profit >= 0 ? '▲' : '▼';
+                    let profitClass = profit > 0 ? 'profit-text' : (profit < 0 ? 'loss-text' : '');
+                    let sign = profit > 0 ? '▲ ' : (profit < 0 ? '▼ ' : '');
 
                     tbody.innerHTML += `
                         <tr>
@@ -1252,7 +1254,7 @@
                             <td>$${cash.toFixed(2)}</td>
                             <td>$${totalAsset.toFixed(2)}</td>
                             <td class="${profitClass}">$${profit.toFixed(2)}</td>
-                            <td class="${profitClass}">${sign} ${Math.abs(returnRate).toFixed(1)}%</td>
+                            <td class="${profitClass}">${sign}${Math.abs(returnRate).toFixed(1)}%</td>
                             <td>$${effectiveBudget.toFixed(0)}</td>
                         </tr>
                     `;
@@ -1260,8 +1262,8 @@
             }
 
             let totalReturn = sumBudget > 0 ? (sumProfit / sumBudget) * 100 : 0;
-            let totalProfitClass = sumProfit >= 0 ? 'profit-text' : 'loss-text';
-            let totalSign = sumProfit >= 0 ? '▲' : '▼';
+            let totalProfitClass = sumProfit > 0 ? 'profit-text' : (sumProfit < 0 ? 'loss-text' : '');
+            let totalSign = sumProfit > 0 ? '▲ ' : (sumProfit < 0 ? '▼ ' : '');
 
             tfoot.innerHTML = `
                 <tr>
@@ -1271,7 +1273,7 @@
                     <td>$${sumCash.toFixed(2)}</td>
                     <td>$${sumEval.toFixed(2)}</td>
                     <td class="${totalProfitClass}">$${sumProfit.toFixed(2)}</td>
-                    <td class="${totalProfitClass}">${totalSign} ${Math.abs(totalReturn).toFixed(1)}%</td>
+                    <td class="${totalProfitClass}">${totalSign}${Math.abs(totalReturn).toFixed(1)}%</td>
                     <td>$${sumBudget.toFixed(2)}</td>
                 </tr>
             `;
