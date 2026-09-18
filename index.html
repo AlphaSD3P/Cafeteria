@@ -825,29 +825,33 @@
                 }
             }
 
-            // 1. 떨법 및 추가방어 영역 (종가 미만 구간) -> 방어 기준 수량(defenseStepQty)이 1스텝마다 독립적으로 일정하게 누적되도록 수정
+            // ==========================================
+            // 1. 하단 영역 (떨법 및 추가방어) - 독립 로직
+            // ==========================================
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
                 if (pA >= limitPrice && qA > 0) {
                     addOrder('A', '떨법', pA, qA);
                     
-                    let currentStepCount = 1;
+                    let defenseStepCount = 1;
                     while (true) {
-                        let stepAdd = currentStepCount * defenseStepQty;
-                        let nA = qA + stepAdd;
-                        let p = buyAmount / nA;
-                        if (p < limitPrice || nA > 10000) break;
+                        // 하단 방어 전용 변수(defenseStepQty)만 사용하여 일정한 간격으로 수량 누적
+                        let currentDefenseQty = qA + (defenseStepCount * defenseStepQty);
+                        let p = buyAmount / currentDefenseQty;
+                        if (p < limitPrice || currentDefenseQty > 10000) break;
                         if (p < pA) {
                             let percentText = getDefensePercentText(p, basePrice);
                             addOrder('A', percentText, p, defenseStepQty);
                         }
-                        currentStepCount++;
+                        defenseStepCount++;
                     }
                 }
             }
 
-            // 2. 업다운 및 추가 영역 (종가 이상/포함 구간) -> 추가 기준 수량(addStepQty)이 1스텝마다 독립적으로 일정하게 누적되도록 수정
+            // ==========================================
+            // 2. 상단 영역 (업다운 및 추가) - 독립 로직
+            // ==========================================
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -870,13 +874,13 @@
 
                 addOrder('B', initialLabel, pB, qB);
                 
-                let currentStepCount = 1;
+                let addStepCount = 1;
                 while (true) {
-                    let stepAdd = currentStepCount * addStepQty;
-                    let nB = qB + stepAdd;
-                    let p = buyAmount / nB;
+                    // 상단 추가 전용 변수(addStepQty)만 사용하여 일정한 간격으로 수량 누적
+                    let currentAddQty = qB + (addStepCount * addStepQty);
+                    let p = buyAmount / currentAddQty;
                     let cashCheck = Math.floor(summary.remainingCash / p);
-                    if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
+                    if (p < limitPrice || currentAddQty > 10000 || currentAddQty > cashCheck) break;
                     if (p < pB) {
                         let percentText = getDropPercentText(p, basePrice);
                         if (currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
@@ -884,7 +888,7 @@
                         }
                         addOrder('B', percentText, p, addStepQty);
                     }
-                    currentStepCount++;
+                    addStepCount++;
                 }
             }
 
