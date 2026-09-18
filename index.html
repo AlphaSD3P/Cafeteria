@@ -906,7 +906,7 @@
             if (isNaN(addBuyGap) || addBuyGap < 1) addBuyGap = 1;
 
             let defenseBuyGap = parseInt(document.getElementById('defenseBuyGap').value);
-            if (isNaN(defenseBuyGap) || isNaN(defenseBuyGap) < 1) defenseBuyGap = 1;
+            if (isNaN(defenseBuyGap) || defenseBuyGap < 1) defenseBuyGap = 1;
 
             if (basePrice > 0 && buyAmount > 0) {
                 let currentDropsCount = getDropsFromScreen().length;
