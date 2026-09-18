@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V55 오리지널 알고리즘 완벽 복구판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V54 오리지널 알고리즘 완벽 복구판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -237,7 +237,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V55 - 0회차 종가 1.1배 오리지널 완벽 복구판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V54 - 오리지널 룰 및 잔여회차 산식 완벽 복구판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -556,11 +556,11 @@
                         window.dailyDatabase[dateStr][st] = {
                             baseBudget: carriedBudget,      
                             io: 0,      
-                            realizedProfit: carriedRealizedProfit,                
+                            realizedProfit: carriedRealizedProfit,                  
                             totalSteps: prev.totalSteps,
                             buyAmount: prev.buyAmount,
                             dropRate: prev.dropRate,
-                            basePrice: carriedBasePrice,      
+                            basePrice: carriedBasePrice,     
                             anchorPrice: carriedAnchorPrice, 
                             currentStep: prev.currentStep,
                             totalQty: prev.totalQty,
@@ -749,6 +749,7 @@
             let remainingCash = (effectiveBudget + realizedProfit) - totalCost;
             if (remainingCash < 0) remainingCash = 0;
 
+            // 🔥 V54 수정: 잔여 회차 산식을 오리지널 V50 룰로 완전 원복 (매수금으로 정확히 나눔)
             let remainingSteps = buyAmountPerStep > 0 ? (remainingCash / buyAmountPerStep) : 0;
             let totalHoldingCount = updownQty + dropHoldingSumQty;
 
@@ -783,7 +784,7 @@
             return { remainingCash, remainingSteps, totalAsset };
         }
 
-        window.generateTable = function() {
+window.generateTable = function() {
             if(!window.currentActiveStrategy) return;
             autoSaveState();
             let summary = updateSummaryDashboard();
@@ -810,7 +811,7 @@
 
             function getDropPercentText(targetPrice, currentClose) {
                 let diff = ((targetPrice - currentClose) / currentClose) * 100;
-                return `추가 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
+                return `추가 (${diff > 0 ? '+' : ''}${diff.1}%)`;
             }
 
             function addOrder(type, label, p, q) {
@@ -925,11 +926,11 @@
             }
             document.getElementById('buyResultArea').innerHTML = buyHtml;
 
-            // 3. 매도 주문 로직
+    
+            // 3. 업다운 매도 로직 (🔥 V54 수정: 직전 회차 가격으로 정상 매도 목표가 산출)
             let sellHtml = '';
             if (currentStep > 0) {
                 let sellQty = Math.floor(totalQty / currentStep);
-                let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
                 let targetSellStep = currentStep - 1;
                 let sellTargetPrice = effectiveAnchor * (1 - (dropRate * targetSellStep) / 100);
 
@@ -972,7 +973,7 @@
                 });
                 sellHtml += `</table>`;
             } else {
-                sellHtml = '<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
+                sellHtml = '<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>';
             }
             
             document.getElementById('sellResultArea').innerHTML = sellHtml;
@@ -1086,7 +1087,7 @@
 
             let newAnchorPrice = oldAnchorPrice;
             if (oldAnchorPrice === 0 && isUpDownBought) {
-                newAnchorPrice = currentDayRealBasePrice; 
+                newAnchorPrice = currentDayRealBasePrice; // 최초 체결 시 기준가 최초 설정
             }
 
             let newQty = oldQty + newlyBoughtUpDownQty - soldUpDownQty;
@@ -1128,7 +1129,7 @@
                 
                 newStep = calculatedStep; 
                 newAnchorPrice = nextClosePrice; 
-                newQty += totalDropQty;    
+                newQty += totalDropQty;   
                 newUpdownCost += totalDropValue;
                 finalDrops = [];          
             }
@@ -1173,7 +1174,7 @@
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
                         baseBudget: nextBaseBudgetVal, 
-                        io: 0,                         
+                        io: 0,                           
                         realizedProfit: newRealizedProfit, 
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
