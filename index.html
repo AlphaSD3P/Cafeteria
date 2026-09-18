@@ -1309,7 +1309,8 @@
             if (newStep < 0) newStep = 0;
 
             let newAnchorPrice = oldAnchorPrice;
-            if (isUpDownBought) {
+            if (isUpDownBought || isUpDownSold) {
+                // 업다운이 매수되거나 매도 체결된 경우, 앵커 가격을 당일 종가(체결가)로 갱신
                 newAnchorPrice = nextClosePrice;
             } else if (oldAnchorPrice === 0) {
                 newAnchorPrice = currentDayRealBasePrice;
