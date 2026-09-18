@@ -170,14 +170,16 @@
         .drop-row-item input { font-size: 11px !important; padding: 5px 4px !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important; text-align: right !important; background-color: #f8fafc !important; color: #1e3a8a !important; font-weight: bold !important; box-sizing: border-box; width: 100%; }
         .drop-row-item input.drop-date { text-align: center !important; font-size: 11px !important; padding: 5px 2px !important; }
 
-        .action-row { display: flex; gap: 12px; margin-top: 15px; flex-wrap: nowrap; }
+        .action-row { display: flex; gap: 10px; margin-top: 15px; flex-wrap: nowrap; }
         .action-row button { display: flex; align-items: center; justify-content: center; white-space: nowrap; }
-        .btn-generate { background-color: #22c55e; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1.3; }
+        .btn-generate { background-color: #22c55e; color: white; border: none; padding: 12px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1.2; }
         .btn-generate:hover { background-color: #16a34a; }
-        .btn-nextday { background-color: #3b82f6; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1.3; }
+        .btn-nextday { background-color: #3b82f6; color: white; border: none; padding: 12px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1.2; }
         .btn-nextday:hover { background-color: #2563eb; }
-        .btn-skipday { background-color: #64748b; color: white; border: none; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; min-width: 168px; }
+        .btn-skipday { background-color: #64748b; color: white; border: none; padding: 12px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; }
         .btn-skipday:hover { background-color: #475569; }
+        .btn-deleteday { background-color: #ef4444; color: white; border: none; padding: 12px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; }
+        .btn-deleteday:hover { background-color: #dc2626; }
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
@@ -235,16 +237,19 @@
         .manage-list { max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
         .manage-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
 
-        /* Flatpickr 달력 커스텀 스타일 (종가 입력된 날짜 빨간색 하이라이트) */
+        /* Flatpickr 달력 커스텀 스타일 (종가 입력된 날짜 빨간색 하이라이트 및 상하 간격 분리) */
         .flatpickr-day.has-record {
             background-color: #fee2e2 !important;
             color: #dc2626 !important;
             font-weight: bold !important;
             border-radius: 6px !important;
+            border: 2px solid #ffffff !important; /* 날짜 박스 상하좌우가 붙지 않도록 흰색 경계선 추가 */
+            box-sizing: border-box !important;
         }
         .flatpickr-day.has-record.selected {
             background-color: #dc2626 !important;
             color: #ffffff !important;
+            border: 2px solid #ffffff !important;
         }
     </style>
 </head>
@@ -384,6 +389,7 @@
                     <button class="btn-generate" onclick="generateTable()">⚡ 오늘자 주문 생성</button>
                     <button class="btn-nextday" onclick="processSettlement()">📝 다음날 장마감 종가</button>
                     <button class="btn-skipday" onclick="skipDayWithoutTrade()">⏩ 휴장/스킵 (+1일)</button>
+                    <button class="btn-deleteday" onclick="deleteCurrentDateRecord()">🗑️ 선택날짜 기록 삭제</button>
                 </div>
             </div>
 
@@ -1184,6 +1190,36 @@
 
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
             alert(`⏩ 휴장일 스킵 완료: 거래 없이 상태가 다음 영업일 [ ${nextDateStr} ]로 연장(복사)되었습니다.`);
+        };
+
+        window.deleteCurrentDateRecord = function() {
+            const dateStr = document.getElementById('currentDate').value;
+            const currentSt = window.currentActiveStrategy;
+            if (!dateStr || !currentSt) return;
+
+            if (!confirm(`⚠️ [ ${dateStr} ] 날짜의 [ ${currentSt} ] 기법 기록을 정말로 삭제하시겠습니까?\n\n(잘못 입력된 기록이 삭제되고, 데이터가 이전 상태로 자동 복원됩니다.)`)) {
+                return;
+            }
+
+            if (window.dailyDatabase && window.dailyDatabase[dateStr]) {
+                delete window.dailyDatabase[dateStr][currentSt];
+
+                const remainingKeys = Object.keys(window.dailyDatabase[dateStr]).filter(k => k !== '_meta');
+                if (remainingKeys.length === 0) {
+                    delete window.dailyDatabase[dateStr];
+                }
+            }
+
+            let sortedDates = Object.keys(window.dailyDatabase).sort();
+            let targetDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : getTodayStr();
+            let validDate = getValidBusinessDay(targetDate);
+
+            document.getElementById('currentDate').value = validDate;
+            if (window.fpCurrentDate) window.fpCurrentDate.setDate(validDate, false);
+
+            window.onDateChange();
+            if (window.saveCloudDataInstant) window.saveCloudDataInstant();
+            alert(`✅ [ ${dateStr} ] 기록이 성공적으로 삭제되었습니다.`);
         };
 
         window.processSettlement = function() {
