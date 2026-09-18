@@ -1010,8 +1010,9 @@
 
                     while (true) {
                         let stepQty = defenseBuyGap;
+                        // [수정 핵심 1] 역전 상황에서 목표 갭을 맞출 때는 defenseBuyGap(하단갭)이 아닌 addBuyGap(상단갭)을 사용하도록 수정
                         if (isReversed && nA < targetSyncQty) {
-                            stepQty = Math.min(defenseBuyGap, targetSyncQty - nA);
+                            stepQty = Math.min(addBuyGap, targetSyncQty - nA);
                         }
 
                         let nextNA = nA + stepQty;
@@ -1082,7 +1083,12 @@
 
                     if (order.qtyA > 0 && order.qtyB > 0) {
                         let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
-                        finalLabel = percentText ? `추가방어 (${percentText})` : `추가방어`;
+                        // [수정 핵심 2] 업다운 주문과 갭 채우기 주문이 단가가 완전히 동일해 합쳐질 경우, 라벨에 '업다운'을 살려 표기
+                        if (order.labelB === '업다운' || order.labelA === '업다운') {
+                            finalLabel = percentText ? `업다운 + 추가 (${percentText})` : `업다운 + 추가`;
+                        } else {
+                            finalLabel = percentText ? `추가방어 (${percentText})` : `추가방어`;
+                        }
                         finalClass = 'label-joint';
                     } else if (order.qtyA > 0) {
                         finalLabel = order.labelA;
