@@ -1022,7 +1022,7 @@
                         let stepQty = defenseBuyGap;
 
                         if (isReversed && nA < targetSyncQty) {
-                            stepQty = Math.min(addBuyGap, targetSyncQty - nA);
+                            stepQty = Math.min(defenseBuyGap, targetSyncQty - nA);
                         }
 
                         let nextNA = nA + stepQty;
