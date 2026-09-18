@@ -531,7 +531,7 @@
             window.strategyDates[window.currentActiveStrategy] = dateStr;
 
             if (!window.dailyDatabase[dateStr]) {
-                window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 } };
+                window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 }, _saved: false };
             }
 
             window.strategyNames.forEach(st => {
@@ -665,7 +665,7 @@
             }
 
             if (!window.dailyDatabase[dateStr]) {
-                window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 } };
+                window.dailyDatabase[dateStr] = { _meta: { fxRate: 1368.3 }, _saved: false };
             }
 
             window.dailyDatabase[dateStr][window.currentActiveStrategy] = {
@@ -959,11 +959,8 @@
             }
 
             if (!window.dailyDatabase[nextDateStr]) {
-                window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
+                window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta, _saved: false };
             }
-
-            window.strategyNames.forEach(st => {
-                let currentStData = window.dailyDatabase[currentDateStr][st] || getDefaultStrategyData();
                 window.dailyDatabase[nextDateStr][st] = JSON.parse(JSON.stringify(currentStData));
                 window.dailyDatabase[nextDateStr][st].io = 0; 
             });
@@ -1092,7 +1089,7 @@
             let nextBaseBudgetVal = currentBaseBudgetVal + currentIoVal;
 
             if(!window.dailyDatabase[currentDateStr]) {
-                window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
+                window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 }, _saved: false };
             }
 
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
@@ -1119,7 +1116,7 @@
             nextDateStr = getValidBusinessDay(nextDateStr);
 
             if (!window.dailyDatabase[nextDateStr]) {
-                window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta };
+                window.dailyDatabase[nextDateStr] = { _meta: window.dailyDatabase[currentDateStr]._meta, _saved: false };
             }
 
             window.strategyNames.forEach(st => {
@@ -1283,6 +1280,13 @@
             const selectedDate = document.getElementById('currentDateTab1').value;
             let dates = Object.keys(window.dailyDatabase).sort().reverse();
 
+            // 💾 [수정] '일별 잔고 클라우드 기록 저장' 버튼을 눌러 _saved:true로 확정된 날짜만 히스토리에 표시
+            // (기존 데이터처럼 _saved 값이 없는 경우는 이미 저장된 것으로 간주해 계속 표시)
+            dates = dates.filter(d => {
+                let entry = window.dailyDatabase[d];
+                return entry && entry._saved !== false;
+            });
+
             if (window.isFilterDateOnly) {
                 dates = dates.filter(d => d === selectedDate);
             }
@@ -1352,8 +1356,13 @@
         };
 
         window.saveCurrentLedgerToCloud = function() {
+            const dateStr = document.getElementById('currentDateTab1').value;
+            if (dateStr && window.dailyDatabase[dateStr]) {
+                window.dailyDatabase[dateStr]._saved = true;
+            }
             if (window.saveCloudDataInstant) {
                 window.saveCloudDataInstant();
+                updateHistoryListUI();
                 alert("☁️ 일별 잔고 기록이 클라우드에 성공적으로 저장되었습니다!");
             }
         };
@@ -1408,7 +1417,7 @@
             window.strategyDates[name] = todayStr; 
 
             if (!window.dailyDatabase[todayStr]) {
-                window.dailyDatabase[todayStr] = { _meta: { fxRate: 1368.3 } };
+                window.dailyDatabase[todayStr] = { _meta: { fxRate: 1368.3 }, _saved: false };
             }
             window.dailyDatabase[todayStr][name] = getDefaultStrategyData();
 
