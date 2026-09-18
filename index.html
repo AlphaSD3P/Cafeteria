@@ -198,7 +198,6 @@
         .balance-table td { padding: 10px; border: 1px solid #e2e8f0; color: #334155; }
         .balance-table tfoot tr { background-color: #f1f5f9; font-weight: bold; }
         
-        /* 손익 스타일 클래스 */
         .profit-text { color: #ef4444 !important; font-weight: bold; }
         .loss-text { color: #2563eb !important; font-weight: bold; }
 
@@ -826,7 +825,7 @@
                 }
             }
 
-            // 1. 떨법 및 추가방어 영역 (종가 미만 구간) -> 방어 기준 수량(defenseStepQty) 적용
+            // 1. 떨법 및 추가방어 영역 (종가 미만 구간) -> 방어 기준 수량(defenseStepQty)이 1스텝마다 독립적으로 일정하게 누적되도록 수정
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
@@ -835,7 +834,8 @@
                     
                     let currentStepCount = 1;
                     while (true) {
-                        let nA = qA + (currentStepCount * defenseStepQty);
+                        let stepAdd = currentStepCount * defenseStepQty;
+                        let nA = qA + stepAdd;
                         let p = buyAmount / nA;
                         if (p < limitPrice || nA > 10000) break;
                         if (p < pA) {
@@ -847,7 +847,7 @@
                 }
             }
 
-            // 2. 업다운 및 추가 영역 (종가 이상/포함 구간) -> 추가 기준 수량(addStepQty) 적용
+            // 2. 업다운 및 추가 영역 (종가 이상/포함 구간) -> 추가 기준 수량(addStepQty)이 1스텝마다 독립적으로 일정하게 누적되도록 수정
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -872,7 +872,8 @@
                 
                 let currentStepCount = 1;
                 while (true) {
-                    let nB = qB + (currentStepCount * addStepQty);
+                    let stepAdd = currentStepCount * addStepQty;
+                    let nB = qB + stepAdd;
                     let p = buyAmount / nB;
                     let cashCheck = Math.floor(summary.remainingCash / p);
                     if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
