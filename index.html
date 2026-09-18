@@ -775,7 +775,7 @@
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
             
-            // 추가 기준 수량 및 방어 기준 수량 독립 적용
+            // 추가 기준 수량 및 방어 기준 수량 개별 가져오기 (기본값 1)
             let addStepQty = parseInt(document.getElementById('addStepQty').value) || 1;
             if (addStepQty < 1) addStepQty = 1;
 
@@ -827,14 +827,13 @@
                 }
             }
 
-            // 1. 떨법(방어) 매수 로직 -> defenseStepQty 독립 적용
+            // 1. 떨법(방어) 매수 로직 (종가 - 0.01) -> defenseStepQty 독립 적용
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
                 if (pA >= limitPrice && qA > 0) {
                     addOrder('A', '떨법', pA, qA);
                     
-                    // 기본 수량에서 defenseStepQty 단위로 촘촘한 방어 주문 생성
                     let currentStepCount = 1;
                     while (true) {
                         let nA = qA + (currentStepCount * defenseStepQty);
@@ -872,7 +871,6 @@
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
                 addOrder('B', '업다운', pB, qB);
                 
-                // 기본 수량에서 addStepQty 단위로 촘촘한 추가 주문 생성
                 let currentStepCount = 1;
                 while (true) {
                     let nB = qB + (currentStepCount * addStepQty);
