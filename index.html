@@ -397,7 +397,7 @@
                         <div class="gap-control-box">
                             <div class="gap-control-item" style="color: #854d0e;">
                                 <span>🟡 상단갭</span>
-                                <input type="number" id="addBuyGap" value="3" min="1" oninput="autoSaveState(); generateTable();" style="background:#fefce8; color:#854d0e;">
+                                <input type="number" id="addBuyGap" value="3" min="1" oninput="this.dataset.userModified='true'; autoSaveState(); generateTable();" style="background:#fefce8; color:#854d0e;">
                             </div>
                             <div class="gap-control-item" style="color: #166534;">
                                 <span>🟢 하단갭</span>
@@ -712,6 +712,7 @@
             
             document.getElementById('addBuyGap').value = data.addBuyGap !== undefined ? data.addBuyGap : 3;
             document.getElementById('defenseBuyGap').value = data.defenseBuyGap !== undefined ? data.defenseBuyGap : 1;
+            delete document.getElementById('addBuyGap').dataset.userModified;
 
             document.getElementById('basePrice').value = data.basePrice || 0;
             document.getElementById('anchorPrice').value = data.anchorPrice !== undefined ? data.anchorPrice : 0;
@@ -898,6 +899,43 @@
             let defenseBuyGap = parseInt(document.getElementById('defenseBuyGap').value);
             if (isNaN(defenseBuyGap) || defenseBuyGap < 1) defenseBuyGap = 1;
 
+            if (basePrice > 0 && buyAmount > 0) {
+                let currentDropsCount = getDropsFromScreen().length;
+                let combinedStep = currentStep + currentDropsCount;
+                let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
+
+                let pA_base = basePrice - 0.01 > 0 ? basePrice - 0.01 : basePrice;
+                let qA_base = Math.floor(buyAmount / pA_base);
+
+                let pB_base = 0;
+                if (currentStep === 0) {
+                    pB_base = basePrice * 1.10; 
+                } else {
+                    let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
+                    pB_base = effectiveAnchor * (1 - (dropRate * effectiveStepForOrder) / 100);
+                }
+                let qB_base = pB_base > 0 ? Math.floor(buyAmount / pB_base) : 0;
+
+                let autoGap = Math.abs(qA_base - qB_base);
+                let maxGap = autoGap > 0 ? autoGap : 1;
+
+                let addBuyGapInput = document.getElementById('addBuyGap');
+                if (addBuyGapInput) {
+                    addBuyGapInput.max = maxGap;
+                    addBuyGapInput.min = 1;
+                }
+
+                if (!document.getElementById('addBuyGap').dataset.userModified) {
+                    addBuyGap = maxGap;
+                    if (addBuyGapInput) addBuyGapInput.value = addBuyGap;
+                } else {
+                    if (addBuyGap > maxGap) {
+                        addBuyGap = maxGap;
+                        if (addBuyGapInput) addBuyGapInput.value = addBuyGap;
+                    }
+                }
+            }
+
             if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
                 document.getElementById('sellResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
@@ -967,8 +1005,15 @@
                     addOrder('A', '떨법', pA, qA);
                     let nA = qA;
 
+                    let isReversed = (currentStep > 0) && (pB > 0) && (pB < pA) && (qA < qB);
+                    let targetSyncQty = qB; 
+
                     while (true) {
                         let stepQty = defenseBuyGap;
+                        if (isReversed && nA < targetSyncQty) {
+                            stepQty = Math.min(defenseBuyGap, targetSyncQty - nA);
+                        }
+
                         let nextNA = nA + stepQty;
                         let p = buyAmount / nextNA;
 
@@ -987,6 +1032,9 @@
                             addOrder('A', percentText, p, stepQty);
                         }
                         nA = nextNA;
+                        if (isReversed && nA >= targetSyncQty) {
+                            isReversed = false;
+                        }
                     }
                 }
             }
@@ -999,6 +1047,10 @@
                 while (true) {
                     let currentGap = (nB < basePriceQty) ? addBuyGap : defenseBuyGap;
                     let nextNB = nB + currentGap;
+                    
+                    if (nB < basePriceQty && nextNB > basePriceQty) {
+                        nextNB = basePriceQty;
+                    }
 
                     let stepQty = nextNB - nB;
                     if (stepQty <= 0) stepQty = 1;
