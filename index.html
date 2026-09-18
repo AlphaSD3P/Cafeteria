@@ -164,7 +164,6 @@
         .input-group input[readonly] { background-color: #f1f5f9; color: #64748b; cursor: not-allowed; }
         .input-group input[type="text"].flatpickr-input { text-align: center; cursor: pointer; background-color: white; }
 
-        /* 떨법 보유 물량 영역 레이아웃 최적화 */
         #dropHoldingsContainer { max-height: 290px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
         .drop-row-item { display: grid; grid-template-columns: 42px 1fr 48px 105px; gap: 4px; align-items: center; margin-bottom: 6px; font-size: 11px; font-weight: bold; color: #334155; }
         .drop-row-item input { font-size: 11px !important; padding: 5px 4px !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important; text-align: right !important; background-color: #f8fafc !important; color: #1e3a8a !important; font-weight: bold !important; box-sizing: border-box; width: 100%; }
@@ -237,13 +236,12 @@
         .manage-list { max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
         .manage-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
 
-        /* Flatpickr 달력 커스텀 스타일 (종가 입력된 날짜 빨간색 하이라이트 및 상하 간격 분리) */
         .flatpickr-day.has-record {
             background-color: #fee2e2 !important;
             color: #dc2626 !important;
             font-weight: bold !important;
             border-radius: 6px !important;
-            border: 2px solid #ffffff !important; /* 날짜 박스 상하좌우가 붙지 않도록 흰색 경계선 추가 */
+            border: 2px solid #ffffff !important;
             box-sizing: border-box !important;
         }
         .flatpickr-day.has-record.selected {
@@ -322,7 +320,6 @@
                 </div>
 
                 <div class="triple-row">
-                    <!-- 실시간 자산 대시보드 -->
                     <div class="card-box" style="background: #f8fafc; border: 1px solid #cbd5e1;">
                         <div class="card-title"><span style="color:#1d4ed8">■ 실시간 자산 대시보드</span></div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -379,7 +376,6 @@
                         </div>
                     </div>
 
-                    <!-- 현재 보유 중인 떨법 물량 -->
                     <div class="card-box">
                         <div class="card-title">
                             <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
@@ -516,7 +512,6 @@
             return (new Date(d - offset)).toISOString().split('T')[0];
         }
 
-        /* Flatpickr 달력 생성 및 종가 기록된 날짜 빨간색 표시 로직 */
         window.initFlatpickr = function() {
             if (window.fpCurrentDate) window.fpCurrentDate.destroy();
             if (window.fpCurrentDateTab1) window.fpCurrentDateTab1.destroy();
@@ -625,7 +620,7 @@
                 io: 0, 
                 realizedProfit: 0,
                 totalSteps: 0, 
-                maxDropSteps: 0, // 떨법 허용최대매수회차 기본값
+                maxDropSteps: 0,
                 buyAmount: 0, 
                 dropRate: 0, 
                 addBuyGap: 3,
@@ -867,7 +862,6 @@
             let totalEvalValue = totalHoldingCount * currentPrice;
             
             let totalAsset = remainingCash + totalEvalValue;
-            
             let totalProfitSum = totalAsset - effectiveBudget; 
             let totalReturn = effectiveBudget > 0 ? (totalProfitSum / effectiveBudget) * 100 : 0;
             if (Math.abs(totalReturn) < 0.01) totalReturn = 0;
@@ -901,7 +895,7 @@
             const currentStep = parseInt(document.getElementById('currentStep').value);
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
-            const maxDropStepsLimit = parseInt(document.getElementById('maxDropStepsSetting').value) || 0; // 떨법 허용최대매수회차
+            const maxDropStepsLimit = parseInt(document.getElementById('maxDropStepsSetting').value) || 0;
 
             let addBuyGap = parseInt(document.getElementById('addBuyGap').value);
             if (isNaN(addBuyGap) || addBuyGap < 1) addBuyGap = 1;
@@ -1002,7 +996,6 @@
             let qB = Math.floor(buyAmount / pB);
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
-            // 1. 떨법 매수 로직 (떨법 허용최대매수회차 제한 검사 포함)
             let allowDropBuy = true;
             if (maxDropStepsLimit > 0 && currentDropsCount >= maxDropStepsLimit) {
                 allowDropBuy = false;
@@ -1031,10 +1024,9 @@
 
                         if (p < limitPrice || nextNA > 10000) break;
 
-                        // 추가 떨법 단계별 회차 카운트 체크 (현재 떨법 보유개수 + 추가 생성되는 단계 인덱스)
-                        let dropStepIndex = currentDropsCount + 1; // 첫번째 추가 떨법은 +1부터 시작
+                        let dropStepIndex = currentDropsCount + 1;
                         if (maxDropStepsLimit > 0 && dropStepIndex > maxDropStepsLimit) {
-                            break; // 최대 회차를 초과하면 추가 떨법 주문 생성 중단
+                            break;
                         }
 
                         if (p < pA) {
@@ -1054,7 +1046,6 @@
                 }
             }
 
-            // 2. 업다운 매수 로직
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
                 addOrder('B', '업다운', pB, qB);
                 
@@ -1127,7 +1118,6 @@
             }
             document.getElementById('buyResultArea').innerHTML = buyHtml;
 
-            // 3. 매도 주문 로직
             let sellHtml = '';
             if (currentStep > 0) {
                 let sellQty = Math.floor(totalQty / currentStep);
