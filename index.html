@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V63 잔고테이블 손익 색상 스타일링판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V64 독립 분리 및 잔여 명칭 변경판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -173,7 +173,7 @@
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; display: flex; justify-content: space-between; align-items: center; }
         .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #3b82f6; padding-left: 8px; }
         
         .order-table { width: 100%; border-collapse: collapse; text-align: center; background: white; margin-bottom: 8px; font-size: 12px; }
@@ -238,7 +238,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V63 - 잔고테이블 손익 색상 스타일링판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V64 - 독립 분리 및 잔여 명칭 변경판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -366,9 +366,9 @@
                 <div class="result-section">
                     <div class="result-title-buy">
                         <span>생성된 매수 주문 (LOC) 미리보기</span>
-                        <div style="font-size: 11px; font-weight: normal; display: flex; align-items: center; gap: 10px;">
-                            <span>추가 기준 수량: <input type="number" id="addStepQty" value="1" min="1" style="width: 40px; text-align: center; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 11px;" oninput="generateTable()"></span>
-                            <span>방어 기준 수량: <input type="number" id="defenseStepQty" value="1" min="1" style="width: 40px; text-align: center; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 11px;" oninput="generateTable()"></span>
+                        <div style="font-size: 11px; font-weight: normal; color: #475569; display: flex; gap: 8px; align-items: center;">
+                            <span>추가 기준 수량: <input type="number" id="addStepQty" value="1" min="1" style="width: 45px; text-align: center; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px;" oninput="generateTable()"></span>
+                            <span>잔여 기준 수량: <input type="number" id="remainderStepQty" value="1" min="1" style="width: 45px; text-align: center; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px;" oninput="generateTable()"></span>
                         </div>
                     </div>
                     <div id="buyResultArea">
@@ -761,6 +761,7 @@
             return { remainingCash, remainingSteps, totalAsset };
         }
 
+        // [독립 분리된 매수 주문 생성 루틴]
         window.generateTable = function() {
             if(!window.currentActiveStrategy) return;
             autoSaveState();
@@ -774,13 +775,9 @@
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
             
-            // 🔒 상단 추가 주문 전용 입력값 (절대 하단과 공유 안 함)
-            let userAddStepQty = parseInt(document.getElementById('addStepQty').value) || 1;
-            if (userAddStepQty < 1) userAddStepQty = 1;
-
-            // 🔒 하단 방어 주문 전용 입력값 (절대 상단과 공유 안 함)
-            let userDefenseStepQty = parseInt(document.getElementById('defenseStepQty').value) || 1;
-            if (userDefenseStepQty < 1) userDefenseStepQty = 1;
+            // 독립 제어 수량 입력값 가져오기
+            const addQtyStep = parseInt(document.getElementById('addStepQty').value) || 1;
+            const remainderQtyStep = parseInt(document.getElementById('remainderStepQty').value) || 1;
 
             if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
@@ -799,9 +796,9 @@
                 return `추가 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
             }
 
-            function getDefensePercentText(targetPrice, currentClose) {
+            function getRemainderPercentText(targetPrice, currentClose) {
                 let diff = ((targetPrice - currentClose) / currentClose) * 100;
-                return `추가방어 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
+                return `잔여 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
             }
 
             function addOrder(type, label, p, q) {
@@ -827,35 +824,29 @@
                 }
             }
 
-            // =========================================================================
-            // [분리 완료] 1. 하단 영역 (떨법 및 추가방어) - 오직 userDefenseStepQty만 누적 적용
-            // =========================================================================
+            // [독립 축 1] 떨법 매수 및 잔여 주문 생성 로직
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
                 if (pA >= limitPrice && qA > 0) {
                     addOrder('A', '떨법', pA, qA);
-                    
-                    let defenseLoopCount = 1;
+                    let nA = qA + remainderQtyStep; // 잔여 기준 수량으로 독립 제어
                     while (true) {
-                        // 떨법 기본 수량(qA)에서 출발하여 아래로 내려갈 때마다 사용자가 지정한 방어 기준 수량만큼 정확히 누적 더하기
-                        let accumulatedDefenseQty = qA + (defenseLoopCount * userDefenseStepQty);
-                        let p = buyAmount / accumulatedDefenseQty;
-                        
-                        if (p < limitPrice || accumulatedDefenseQty > 10000) break;
+                        let p = buyAmount / nA;
+                        if (p < limitPrice || nA > 10000) break;
                         if (p < pA) {
-                            let percentText = getDefensePercentText(p, basePrice);
-                            // 주문 수량은 매 칸마다 userDefenseStepQty 씩 고정되거나 누적 규칙에 맞게 입력
-                            addOrder('A', percentText, p, userDefenseStepQty);
+                            let percentText = getDropPercentText(p, basePrice);
+                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
+                                percentText = `추가 (0.0%)`;
+                            }
+                            addOrder('A', getRemainderPercentText(p, basePrice), p, remainderQtyStep);
                         }
-                        defenseLoopCount++;
+                        nA += remainderQtyStep;
                     }
                 }
             }
 
-            // =========================================================================
-            // [분리 완료] 2. 상단 영역 (업다운 및 추가) - 오직 userAddStepQty만 누적 적용
-            // =========================================================================
+            // [독립 축 2] 업다운 및 추가 주문 생성 로직
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -873,32 +864,22 @@
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
-                let initialLabel = (currentStep === 0 && Math.abs(pB - basePrice) < 0.01) ? `추가 (0.0%)` : getDropPercentText(pB, basePrice);
-                if (Math.abs(pB - (basePrice * 1.10)) < 0.001) initialLabel = '업다운';
-
-                addOrder('B', initialLabel, pB, qB);
+                addOrder('B', '업다운', pB, qB);
                 
-                let addLoopCount = 1;
+                let nB = qB + addQtyStep; // 추가 기준 수량으로 독립 제어
                 while (true) {
-                    // 상단 최초 수량(qB)에서 출발하여 아래로 내려갈 때마다 사용자가 지정한 추가 기준 수량만큼 정확히 누적 더하기
-                    let accumulatedAddQty = qB + (addLoopCount * userAddStepQty);
-                    let p = buyAmount / accumulatedAddQty;
+                    let p = buyAmount / nB;
                     let cashCheck = Math.floor(summary.remainingCash / p);
-                    
-                    if (p < limitPrice || accumulatedAddQty > 10000 || accumulatedAddQty > cashCheck) break;
+                    if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
                     if (p < pB) {
-                        let percentText = getDropPercentText(p, basePrice);
-                        if (currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
-                            percentText = `추가 (0.0%)`;
-                        }
-                        addOrder('B', percentText, p, userAddStepQty);
+                        addOrder('B', getDropPercentText(p, basePrice), p, addQtyStep);
                     }
-                    addLoopCount++;
+                    nB += addQtyStep;
                 }
             }
 
             let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 모든 매수 주문은 종가 기준 LOC로 진행되며, 상단 추가 주문은 '추가 기준 수량', 하단 방어 주문은 '방어 기준 수량'을 독립적으로 따릅니다.</div>`;
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 상단 '추가'와 하단 '잔여' 주문이 각자 독립된 기준 수량에 맞춰 계산됩니다.</div>`;
 
             if (finalOrders.length > 0) {
                 buyHtml += `<table class="order-table">
@@ -907,26 +888,22 @@
                 finalOrders.forEach(order => {
                     let finalLabel = '';
                     let finalClass = '';
-                    let totalQ = 0;
+                    let totalQ = order.qtyA + order.qtyB;
 
                     if (order.qtyA > 0 && order.qtyB > 0) {
-                        totalQ = order.qtyA + order.qtyB;
-                        finalLabel = order.labelA ? order.labelA : order.labelB;
+                        let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
+                        finalLabel = percentText ? `통합방어 (${percentText})` : `통합방어`;
                         finalClass = 'label-joint';
                     } else if (order.qtyA > 0) {
-                        totalQ = order.qtyA;
                         finalLabel = order.labelA;
                         finalClass = 'label-drop';
                     } else {
-                        totalQ = order.qtyB;
                         finalLabel = order.labelB;
                         finalClass = 'label-updown';
                     }
 
-                    if (finalLabel === '떨법') finalClass = 'label-drop';
-                    if (finalLabel === '업다운') finalClass = 'label-updown';
-                    if (finalLabel.includes('추가방어')) finalClass = 'label-joint';
-                    if (finalLabel.includes('추가')) finalClass = 'label-updown';
+                    if (order.labelA === '떨법') finalClass = 'label-drop';
+                    if (order.labelB === '업다운') finalClass = 'label-updown';
 
                     buyHtml += `
                         <tr>
@@ -942,7 +919,7 @@
             }
             document.getElementById('buyResultArea').innerHTML = buyHtml;
 
-            // 3. 매도 주문 로직
+            // 매도 주문 로직
             let sellHtml = '';
             if (currentStep > 0) {
                 let sellQty = Math.floor(totalQty / currentStep);
