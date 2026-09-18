@@ -846,31 +846,7 @@
                 }
             }
 
-            // 1. 떨법 매수 로직 (종가 - 0.01) - 방어매수갭 적용
-            if (summary.remainingSteps >= 2.0) {
-                let pA = basePrice - 0.01;
-                let qA = Math.floor(buyAmount / pA);
-                if (pA >= limitPrice && qA > 0) {
-                    addOrder('A', '떨법', pA, qA);
-                    let nA = qA;
-                    while (true) {
-                        let nextNA = nA + defenseBuyGap;
-                        let stepQty = defenseBuyGap;
-                        let p = buyAmount / nextNA;
-                        if (p < limitPrice || nextNA > 10000) break;
-                        if (p < pA) {
-                            let percentText = getDropPercentText(p, basePrice);
-                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
-                                percentText = `추가 (0.0%)`;
-                            }
-                            addOrder('A', percentText, p, stepQty);
-                        }
-                        nA = nextNA;
-                    }
-                }
-            }
-
-            // 2. 업다운 매수 로직 - 추가매수갭 & 방어매수갭 적용
+            // --- 업다운 기준 단가 및 수량 먼저 산출 ---
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -887,6 +863,51 @@
             let qB = Math.floor(buyAmount / pB);
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
+            // 1. 떨법 매수 로직 (고회차 역전/추가매수 구간 & 방어매수 구간 분리 보정)
+            if (summary.remainingSteps >= 2.0) {
+                let pA = basePrice - 0.01;
+                let qA = Math.floor(buyAmount / pA);
+
+                if (pA >= limitPrice && qA > 0) {
+                    addOrder('A', '떨법', pA, qA);
+                    let nA = qA;
+
+                    // 고회차 단가 역전 여부 확인 (업다운 시작 단가가 떨법 단가보다 낮아 떨법 시작 수량이 작은 경우)
+                    let isReversed = (currentStep > 0) && (pB > 0) && (pB < pA) && (qA < qB);
+                    let targetSyncQty = qB; // 스위칭 지점까지 수량을 단번에 일괄 보정할 목표 수량
+
+                    while (true) {
+                        let stepQty = defenseBuyGap;
+
+                        // [추가매수 구간]: 스위칭 지점 상단에서 물량 갭을 한방에/연속으로 메움
+                        if (isReversed && nA < targetSyncQty) {
+                            stepQty = Math.max(addBuyGap, targetSyncQty - nA);
+                        }
+
+                        let nextNA = nA + stepQty;
+                        let p = buyAmount / nextNA;
+
+                        if (p < limitPrice || nextNA > 10000) break;
+
+                        if (p < pA) {
+                            let percentText = getDropPercentText(p, basePrice);
+                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
+                                percentText = `추가 (0.0%)`;
+                            }
+                            addOrder('A', percentText, p, stepQty);
+                        }
+
+                        nA = nextNA;
+
+                        // 스위칭 수량 도달 시 방어매수 구간으로 전환
+                        if (isReversed && nA >= targetSyncQty) {
+                            isReversed = false;
+                        }
+                    }
+                }
+            }
+
+            // 2. 업다운 매수 로직 - 추가매수갭 & 방어매수갭 적용
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
                 addOrder('B', '업다운', pB, qB);
                 
