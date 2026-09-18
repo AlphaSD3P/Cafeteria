@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V54 오리지널 알고리즘 완벽 복구판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V55 오리지널 알고리즘 완벽 복구판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -237,7 +237,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V54 - 오리지널 룰 및 잔여회차 산식 완벽 복구판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V55 - 0회차 종가 1.1배 & 떨법 -0.01 룰 완벽 복구판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -749,7 +749,6 @@
             let remainingCash = (effectiveBudget + realizedProfit) - totalCost;
             if (remainingCash < 0) remainingCash = 0;
 
-            // 🔥 V54 수정: 잔여 회차 산식을 오리지널 V50 룰로 완전 원복 (매수금으로 정확히 나눔)
             let remainingSteps = buyAmountPerStep > 0 ? (remainingCash / buyAmountPerStep) : 0;
             let totalHoldingCount = updownQty + dropHoldingSumQty;
 
@@ -790,14 +789,14 @@
             let summary = updateSummaryDashboard();
 
             const basePrice = parseFloat(document.getElementById('basePrice').value);
-            const anchorPrice = parseFloat(document.getElementById('anchorPrice').value) || basePrice; 
+            const anchorPrice = parseFloat(document.getElementById('anchorPrice').value) || 0; 
             const dropRate = parseFloat(document.getElementById('dropRate').value);
             const buyAmount = parseFloat(document.getElementById('buyAmount').value);
             const currentStep = parseInt(document.getElementById('currentStep').value);
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
 
-            if(isNaN(basePrice) || isNaN(anchorPrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
+            if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
                 document.getElementById('sellResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
                 return;
@@ -811,10 +810,11 @@
 
             function getDropPercentText(targetPrice, currentClose) {
                 let diff = ((targetPrice - currentClose) / currentClose) * 100;
-                return `추가 (${diff.toFixed(1)}%)`;
+                return `추가 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
             }
 
             function addOrder(type, label, p, q) {
+                if (q <= 0 || p <= 0) return;
                 window.globalPendingBuys.push({
                     category: type === 'A' ? 'drop' : 'updown',
                     label: label,
@@ -836,9 +836,9 @@
                 }
             }
 
-            // 1. 떨법 및 추가방어 매수 로직
+            // 1. 떨법 매수 로직 (🔥 0회차일 때 종가 - 0.01 룰 적용)
             if (summary.remainingSteps >= 2.0) {
-                let pA = basePrice - 0.01;
+                let pA = currentStep === 0 ? (basePrice - 0.01) : (basePrice - 0.01);
                 let qA = Math.floor(buyAmount / pA);
                 if (pA >= limitPrice && qA > 0) {
                     addOrder('A', '떨법', pA, qA);
@@ -847,19 +847,30 @@
                         let p = buyAmount / nA;
                         if (p < limitPrice || nA > 10000) break;
                         if (p < pA) {
-                            addOrder('A', getDropPercentText(p, basePrice), p, 1);
+                            let percentText = getDropPercentText(p, basePrice);
+                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
+                                percentText = `추가 (0.0%)`;
+                            }
+                            addOrder('A', percentText, p, 1);
                         }
                         nA++;
                     }
                 }
             }
 
-            // 2. 업다운 매수 로직 (🔥 V54 수정: 최초 0회차이거나 앵커가 없을 때는 종가 위(+10%) 혹은 오리지널 V50 산식으로 정확히 산출)
-            let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
-            let targetStepForBuy = currentStep + 1;
-            
-            // 오리지널 V50 V51의 회차별 하락간격 산식 완전 원복
-            let pB = (currentStep === 0 && anchorPrice === 0) ? (basePrice * 1.10) : (effectiveAnchor * (1 - (dropRate * targetStepForBuy) / 100));
+            // 2. 업다운 매수 로직 (🔥 0회차일 때 종가 * 1.1배 오리지널 룰 완벽 적용)
+            let currentDropsCount = getDropsFromScreen().length;
+            let combinedStep = currentStep + currentDropsCount;
+            let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
+
+            let pB = 0;
+            if (currentStep === 0) {
+                pB = basePrice * 1.10; // 0회차일 때는 종가의 1.1배 ($125 -> $137.50)
+            } else {
+                let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
+                let targetStepForBuy = effectiveStepForOrder + 1;
+                pB = effectiveAnchor * (1 - (dropRate * targetStepForBuy) / 100);
+            }
             
             let maxQtyByCash = pB > 0 ? Math.floor(summary.remainingCash / pB) : 0;
             let qB = Math.floor(buyAmount / pB);
@@ -881,7 +892,7 @@
             }
 
             let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 업다운 매수타겟은 회차별 하락간격에 맞춰 정확히 산출됩니다.</div>`;
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 모든 매수 주문은 종가 기준 LOC로 진행되며, 업다운 하락간격은 [업다운 회차(${currentStep}) + 떨법 물량 개수(${currentDropsCount})]를 합산하여 적용됩니다.</div>`;
 
             if (finalOrders.length > 0) {
                 buyHtml += `<table class="order-table">
@@ -898,11 +909,15 @@
                         finalClass = 'label-joint';
                     } else if (order.qtyA > 0) {
                         finalLabel = order.labelA;
-                        finalClass = 'label-drop';
+                        finalClass = order.labelA.includes('0.0%') ? 'label-drop' : 'label-drop';
                     } else {
                         finalLabel = order.labelB;
                         finalClass = 'label-updown';
                     }
+
+                    if (order.labelA === '떨법') finalClass = 'label-drop';
+                    if (order.labelB === '업다운') finalClass = 'label-updown';
+                    if (order.labelA && order.labelA.includes('0.0%')) finalLabel = `추가 (0.0%)`;
 
                     buyHtml += `
                         <tr>
@@ -918,11 +933,11 @@
             }
             document.getElementById('buyResultArea').innerHTML = buyHtml;
 
+            // 3. 매도 주문 로직
             let sellHtml = '';
-            
-            // 3. 업다운 매도 로직 (🔥 V54 수정: 직전 회차 가격으로 정상 매도 목표가 산출)
             if (currentStep > 0) {
                 let sellQty = Math.floor(totalQty / currentStep);
+                let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
                 let targetSellStep = currentStep - 1;
                 let sellTargetPrice = effectiveAnchor * (1 - (dropRate * targetSellStep) / 100);
 
@@ -1079,7 +1094,7 @@
 
             let newAnchorPrice = oldAnchorPrice;
             if (oldAnchorPrice === 0 && isUpDownBought) {
-                newAnchorPrice = currentDayRealBasePrice; // 최초 체결 시 기준가 최초 설정
+                newAnchorPrice = currentDayRealBasePrice; 
             }
 
             let newQty = oldQty + newlyBoughtUpDownQty - soldUpDownQty;
@@ -1121,7 +1136,7 @@
                 
                 newStep = calculatedStep; 
                 newAnchorPrice = nextClosePrice; 
-                newQty += totalDropQty;   
+                newQty += totalDropQty;    
                 newUpdownCost += totalDropValue;
                 finalDrops = [];          
             }
@@ -1166,7 +1181,7 @@
                 if (st === window.currentActiveStrategy) {
                     window.dailyDatabase[nextDateStr][st] = {
                         baseBudget: nextBaseBudgetVal, 
-                        io: 0,                           
+                        io: 0,                         
                         realizedProfit: newRealizedProfit, 
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
