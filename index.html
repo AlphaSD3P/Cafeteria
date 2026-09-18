@@ -900,6 +900,9 @@
             const currentStep = parseInt(document.getElementById('currentStep').value);
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
+            
+            // 떨법 회차 제한 값 가져오기
+            const dropStepLimit = parseInt(document.getElementById('dropStepSetting').value) || 0; 
 
             let addBuyGap = parseInt(document.getElementById('addBuyGap').value);
             if (isNaN(addBuyGap) || addBuyGap < 1) addBuyGap = 1;
@@ -1000,8 +1003,8 @@
             let qB = Math.floor(buyAmount / pB);
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
-            // 1. 떨법 매수 로직
-            if (summary.remainingSteps >= 2.0) {
+            // 1. 떨법 매수 로직 (현재 보유 개수가 설정된 떨법 회차 제한 미만일 때만 동작하도록 조건 추가)
+            if (summary.remainingSteps >= 2.0 && currentDropsCount < dropStepLimit) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
 
