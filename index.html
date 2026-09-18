@@ -368,8 +368,8 @@
                     <div class="result-title-buy">
                         <span>생성된 매수 주문 (LOC) 미리보기</span>
                         <div style="font-size: 11px; font-weight: normal; display: flex; align-items: center; gap: 10px;">
-                            <span>추가 기준 수량: <input type="number" id="addStepQty" value="1" min="1" style="width: 40px; text-align: center; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 11px;" oninput="generateTable()"></span>
-                            <span>방어 기준 수량: <input type="number" id="defenseStepQty" value="1" min="1" style="width: 40px; text-align: center; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 11px;" oninput="generateTable()"></span>
+                            <span>추가 기준 수량: <input type="number" id="addStepQty" value="2" min="1" style="width: 40px; text-align: center; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 11px;" oninput="generateTable()"></span>
+                            <span>방어 기준 수량: <input type="number" id="defenseStepQty" value="3" min="1" style="width: 40px; text-align: center; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 11px;" oninput="generateTable()"></span>
                         </div>
                     </div>
                     <div id="buyResultArea">
@@ -775,7 +775,7 @@
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
             
-            // 추가 기준 수량 및 방어 기준 수량 개별 가져오기 (기본값 1)
+            // 추가 기준 수량 및 방어 기준 수량 분리 가져오기
             let addStepQty = parseInt(document.getElementById('addStepQty').value) || 1;
             if (addStepQty < 1) addStepQty = 1;
 
@@ -827,7 +827,7 @@
                 }
             }
 
-            // 1. 떨법(방어) 매수 로직 (종가 - 0.01) -> defenseStepQty 독립 적용
+            // 1. 떨법 및 추가방어 영역 (종가 미만 구간) -> 오직 '방어 기준 수량(defenseStepQty)'만 적용
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
@@ -841,9 +841,6 @@
                         if (p < limitPrice || nA > 10000) break;
                         if (p < pA) {
                             let percentText = getDefensePercentText(p, basePrice);
-                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
-                                percentText = `추가방어 (0.0%)`;
-                            }
                             addOrder('A', percentText, p, defenseStepQty);
                         }
                         currentStepCount++;
@@ -851,7 +848,7 @@
                 }
             }
 
-            // 2. 업다운(추가) 매수 로직 -> addStepQty 독립 적용
+            // 2. 업다운 및 추가 영역 (종가 이상/포함 구간) -> 오직 '추가 기준 수량(addStepQty)'만 적용
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -869,7 +866,10 @@
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
-                addOrder('B', '업다운', pB, qB);
+                let initialLabel = (currentStep === 0 && Math.abs(pB - basePrice) < 0.01) ? `추가 (0.0%)` : getDropPercentText(pB, basePrice);
+                if (Math.abs(pB - (basePrice * 1.10)) < 0.001) initialLabel = '업다운';
+
+                addOrder('B', initialLabel, pB, qB);
                 
                 let currentStepCount = 1;
                 while (true) {
@@ -878,14 +878,18 @@
                     let cashCheck = Math.floor(summary.remainingCash / p);
                     if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
                     if (p < pB) {
-                        addOrder('B', getDropPercentText(p, basePrice), p, addStepQty);
+                        let percentText = getDropPercentText(p, basePrice);
+                        if (currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
+                            percentText = `추가 (0.0%)`;
+                        }
+                        addOrder('B', percentText, p, addStepQty);
                     }
                     currentStepCount++;
                 }
             }
 
             let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 모든 매수 주문은 종가 기준 LOC로 진행되며, 업다운 하락간격은 [업다운 회차(${currentStep}) + 떨법 물량 개수(${currentDropsCount})]를 합산하여 적용됩니다.</div>`;
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 모든 매수 주문은 종가 기준 LOC로 진행되며, 상단 추가 주문은 '추가 기준 수량', 하단 방어 주문은 '방어 기준 수량'을 독립적으로 따릅니다.</div>`;
 
             if (finalOrders.length > 0) {
                 buyHtml += `<table class="order-table">
@@ -894,22 +898,26 @@
                 finalOrders.forEach(order => {
                     let finalLabel = '';
                     let finalClass = '';
-                    let totalQ = order.qtyA + order.qtyB;
+                    let totalQ = 0;
 
                     if (order.qtyA > 0 && order.qtyB > 0) {
-                        let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
-                        finalLabel = percentText ? `추가방어 (${percentText})` : `추가방어`;
+                        totalQ = order.qtyA + order.qtyB;
+                        finalLabel = order.labelA ? order.labelA : order.labelB;
                         finalClass = 'label-joint';
                     } else if (order.qtyA > 0) {
+                        totalQ = order.qtyA;
                         finalLabel = order.labelA;
                         finalClass = 'label-drop';
                     } else {
+                        totalQ = order.qtyB;
                         finalLabel = order.labelB;
                         finalClass = 'label-updown';
                     }
 
-                    if (order.labelA === '떨법') finalClass = 'label-drop';
-                    if (order.labelB === '업다운') finalClass = 'label-updown';
+                    if (finalLabel === '떨법') finalClass = 'label-drop';
+                    if (finalLabel === '업다운') finalClass = 'label-updown';
+                    if (finalLabel.includes('추가방어')) finalClass = 'label-joint';
+                    if (finalLabel.includes('추가')) finalClass = 'label-updown';
 
                     buyHtml += `
                         <tr>
