@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V61 수동버튼 제거 및 대시보드 정돈판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V62 떨법 칸 디자인 및 높이 확장판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -158,8 +158,9 @@
         .input-group input[readonly] { background-color: #f1f5f9; color: #64748b; cursor: not-allowed; }
         .input-group input[type="date"] { text-align: center; }
 
-        .drop-row-item { display: grid; grid-template-columns: 45px 1fr 55px 95px; gap: 4px; align-items: center; margin-bottom: 6px; font-size: 11px; font-weight: bold; color: #64748b; }
-        .drop-row-item input { font-size: 11px !important; padding: 5px 3px !important; }
+        .drop-row-item { display: grid; grid-template-columns: 45px 1fr 55px 95px; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; font-weight: bold; color: #334155; }
+        .drop-row-item input { font-size: 12px !important; padding: 6px 8px !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important; text-align: right !important; background-color: #f8fafc !important; color: #1e3a8a !important; font-weight: bold !important; }
+        .drop-row-item input[type="date"] { text-align: center !important; }
 
         .action-row { display: flex; gap: 12px; margin-top: 15px; flex-wrap: nowrap; }
         .action-row button { display: flex; align-items: center; justify-content: center; white-space: nowrap; }
@@ -236,7 +237,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V61 - 수동버튼 제거 및 대시보드 정돈판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V62 - 떨법 칸 파스텔톤 정돈 및 높이 확장판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -286,7 +287,7 @@
                 </div>
 
                 <div class="triple-row">
-                    <!-- 실시간 자산 대시보드 (누적 실현손익 칸 제거됨) -->
+                    <!-- 실시간 자산 대시보드 -->
                     <div class="card-box" style="background: #f8fafc; border: 1px solid #cbd5e1;">
                         <div class="card-title"><span style="color:#1d4ed8">■ 실시간 자산 대시보드</span></div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -343,12 +344,12 @@
                         </div>
                     </div>
 
-                    <!-- 현재 보유 중인 떨법 물량 (수동 추가 및 삭제 버튼 제거됨) -->
+                    <!-- 현재 보유 중인 떨법 물량 (높이를 늘려 기본 8개까지 표시, 파스텔톤 디자인 적용) -->
                     <div class="card-box">
                         <div class="card-title">
                             <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
                         </div>
-                        <div id="dropHoldingsContainer" style="max-height: 220px; overflow-y: auto;">
+                        <div id="dropHoldingsContainer" style="max-height: 295px; overflow-y: auto;">
                         </div>
                     </div>
                 </div>
@@ -618,7 +619,7 @@
             container.innerHTML = '';
             
             if (!dropsData || dropsData.length === 0) {
-                container.innerHTML = `<div style="color: #94a3b8; font-size: 11px; text-align: center; padding: 20px;">보유 중인 떨법 물량이 없습니다.</div>`;
+                container.innerHTML = `<div style="color: #94a3b8; font-size: 12px; text-align: center; padding: 30px;">보유 중인 떨법 물량이 없습니다.</div>`;
                 return;
             }
 
@@ -627,9 +628,9 @@
                 row.className = 'drop-row-item';
                 row.innerHTML = `
                     <span style="font-weight:bold; color:#64748b;">떨법${idx + 1}</span>
-                    <input type="number" step="0.01" class="drop-price" readonly value="${d.price}" style="background:#f1f5f9; cursor:default;">
-                    <input type="number" class="drop-qty" readonly value="${d.qty}" style="background:#f1f5f9; cursor:default;">
-                    <input type="date" class="drop-date" readonly value="${d.date}" style="background:#f1f5f9; cursor:default; text-align:center;">
+                    <input type="number" step="0.01" class="drop-price" readonly value="${d.price}">
+                    <input type="number" class="drop-qty" readonly value="${d.qty}">
+                    <input type="date" class="drop-date" readonly value="${d.date}">
                 `;
                 container.appendChild(row);
             });
