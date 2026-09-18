@@ -173,7 +173,7 @@
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; }
+        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; display: flex; justify-content: space-between; align-items: center; }
         .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #3b82f6; padding-left: 8px; }
         
         .order-table { width: 100%; border-collapse: collapse; text-align: center; background: white; margin-bottom: 8px; font-size: 12px; }
@@ -365,7 +365,13 @@
 
             <div class="orders-container">
                 <div class="result-section">
-                    <div class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</div>
+                    <div class="result-title-buy">
+                        <span>생성된 매수 주문 (LOC) 미리보기</span>
+                        <div style="font-size: 11px; font-weight: normal; display: flex; align-items: center; gap: 5px;">
+                            <span>추가/방어 기준 수량:</span>
+                            <input type="number" id="orderStepQty" value="1" min="1" style="width: 45px; text-align: center; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: bold; font-size: 11px;" oninput="generateTable()">
+                        </div>
+                    </div>
                     <div id="buyResultArea">
                         <div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
                     </div>
@@ -768,6 +774,10 @@
             const currentStep = parseInt(document.getElementById('currentStep').value);
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
+            
+            // 추가/방어 기준 수량 가져오기 (기본값 1)
+            let stepQty = parseInt(document.getElementById('orderStepQty').value) || 1;
+            if (stepQty < 1) stepQty = 1;
 
             if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
@@ -812,10 +822,11 @@
             // 1. 떨법 매수 로직 (종가 - 0.01)
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
+                // 기본 수량(qA)을 stepQty 배수로 맞추거나 기본계산 적용
                 let qA = Math.floor(buyAmount / pA);
                 if (pA >= limitPrice && qA > 0) {
                     addOrder('A', '떨법', pA, qA);
-                    let nA = qA + 1;
+                    let nA = qA + stepQty;
                     while (true) {
                         let p = buyAmount / nA;
                         if (p < limitPrice || nA > 10000) break;
@@ -824,9 +835,9 @@
                             if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
                                 percentText = `추가 (0.0%)`;
                             }
-                            addOrder('A', percentText, p, 1);
+                            addOrder('A', percentText, p, stepQty);
                         }
-                        nA++;
+                        nA += stepQty;
                     }
                 }
             }
@@ -851,15 +862,15 @@
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
                 addOrder('B', '업다운', pB, qB);
                 
-                let nB = qB + 1;
+                let nB = qB + stepQty;
                 while (true) {
                     let p = buyAmount / nB;
                     let cashCheck = Math.floor(summary.remainingCash / p);
                     if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
                     if (p < pB) {
-                        addOrder('B', getDropPercentText(p, basePrice), p, 1);
+                        addOrder('B', getDropPercentText(p, basePrice), p, stepQty);
                     }
-                    nB++;
+                    nB += stepQty;
                 }
             }
 
