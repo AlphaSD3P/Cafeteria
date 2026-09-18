@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V65 LOC 추가/추가방어 그리드 개별 설정판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V66 추가 1줄 합산 및 방어 묶음 간격판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -198,7 +198,6 @@
         .balance-table td { padding: 10px; border: 1px solid #e2e8f0; color: #334155; }
         .balance-table tfoot tr { background-color: #f1f5f9; font-weight: bold; }
         
-        /* 손익 스타일 클래스 */
         .profit-text { color: #ef4444 !important; font-weight: bold; }
         .loss-text { color: #2563eb !important; font-weight: bold; }
 
@@ -239,7 +238,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V65 - LOC 추가/추가방어 그리드 개별 설정판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V66 - 추가 1줄 합산 및 방어 묶음 간격판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -847,9 +846,17 @@
                 if (pA >= limitPrice && qA > 0) {
                     addOrder('A', '떨법', pA, qA);
                     
+                    // 🔥 [개선 1] 업다운과 떨법 수량의 차이(diff)를 1줄로 딱 합산해서 표시
                     let diffQtyA = Math.abs(qA - qB);
-                    let stepQtyA = gridAddQty > 0 ? gridAddQty : 1;
-                    
+                    if (diffQtyA > 0 && qA > qB) {
+                        let percentText = getDropPercentText(pA, basePrice);
+                        if(currentStep === 0 && Math.abs(pA - basePrice) < 0.01) {
+                            percentText = `추가 (0.0%)`;
+                        }
+                        addOrder('A', percentText, pA, diffQtyA);
+                    }
+
+                    // 이후 그리드 간격 (gridAddQty 적용)
                     let nA = qA + 1;
                     while (true) {
                         let p = buyAmount / nA;
@@ -859,7 +866,7 @@
                             if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
                                 percentText = `추가 (0.0%)`;
                             }
-                            let assignQty = (nA <= qA + diffQtyA) ? (diffQtyA > 0 ? diffQtyA : stepQtyA) : stepQtyA;
+                            let assignQty = gridAddQty > 0 ? gridAddQty : 1;
                             addOrder('A', percentText, p, assignQty);
                         }
                         nA++;
@@ -874,7 +881,7 @@
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
                 addOrder('B', '업다운', pB, qB);
                 
-                let diffQtyB = Math.abs(qB - qA);
+                // 🔥 [개선 2] 방어그리드 설정값(gridDefenseQty)에 따라 2개 또는 3개씩 묶어서 내려가도록 적용
                 let stepQtyB = gridDefenseQty > 0 ? gridDefenseQty : 1;
 
                 let nB = qB + 1;
@@ -883,15 +890,14 @@
                     let cashCheck = Math.floor(summary.remainingCash / p);
                     if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
                     if (p < pB) {
-                        let assignQty = (nB <= qB + diffQtyB) ? (diffQtyB > 0 ? diffQtyB : stepQtyB) : stepQtyB;
-                        addOrder('B', getDropPercentText(p, basePrice), p, assignQty);
+                        addOrder('B', getDropPercentText(p, basePrice), p, stepQtyB);
                     }
                     nB++;
                 }
             }
 
             let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 추가그리드(${gridAddQty}) 및 방어그리드(${gridDefenseQty}) 설정이 반영되었습니다.</div>`;
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 추가 1줄 합산 및 방어그리드(${gridDefenseQty}개) 설정이 반영되었습니다.</div>`;
 
             if (finalOrders.length > 0) {
                 buyHtml += `<table class="order-table">
