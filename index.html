@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V56 오리지널 알고리즘 완벽 복구판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V57 앵커가격 자동갱신 완벽 수정판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -237,7 +237,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V56 - 업다운/떨법 매수·매도 산식 정밀 수정판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V57 - 앵커가격 체결 자동갱신 완벽 수정판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -836,7 +836,7 @@
                 }
             }
 
-            // 1. 떨법 매수 로직 (0회차든 아니든 종가 - 0.01)
+            // 1. 떨법 매수 로직 (종가 - 0.01)
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
@@ -858,14 +858,14 @@
                 }
             }
 
-            // 2. 업다운 매수 로직 (🔥 0회차일 때 종가 * 1.1배, 1회차 이상일 때 앵커 기준 하락간격 * (회차+떨법갯수) 적용)
+            // 2. 업다운 매수 로직 (0회차: 종가*1.1, 1회차 이상: 앵커 기준 하락간격 * (회차+떨법갯수))
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
 
             let pB = 0;
             if (currentStep === 0) {
-                pB = basePrice * 1.10; // 0회차일 때는 종가의 1.1배
+                pB = basePrice * 1.10; 
             } else {
                 let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
                 let targetStepForBuy = effectiveStepForOrder + 1;
@@ -932,13 +932,12 @@
             }
             document.getElementById('buyResultArea').innerHTML = buyHtml;
 
-            // 3. 매도 주문 로직 (🔥 업다운 매도 및 떨법 매도가 전일 종가/보유 매수가격을 정확히 반영하도록 수정)
+            // 3. 매도 주문 로직 (업다운 매도 및 떨법 매도 단가 반영)
             let sellHtml = '';
             if (currentStep > 0) {
                 let sellQty = Math.floor(totalQty / currentStep);
                 let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
                 
-                // 만약 currentStep이 1이고 anchorPrice가 존재한다면 앵커가격(전일 종가 등)을 그대로 반영
                 let sellTargetPrice = 0;
                 if (currentStep === 1 && anchorPrice > 0) {
                     sellTargetPrice = anchorPrice; 
@@ -961,7 +960,6 @@
             let currentDrops = getDropsFromScreen();
             let dropCount = 1;
             currentDrops.forEach(d => {
-                // 떨법 매도는 해당 떨법 물량의 매수가(전일 종가 등)를 정확히 반영
                 let dropSellPrice = d.price > 0 ? d.price : basePrice;
                 window.globalPendingSells.push({
                     category: 'drop',
@@ -1100,9 +1098,13 @@
             if (isUpDownSold) newStep -= 1;
             if (newStep < 0) newStep = 0;
 
+            // 🔥 [핵심 수정] 업다운 매수가 체결되었을 때는 새로운 종가(nextClosePrice)로 앵커 가격을 갱신하고,
+            // 체결되지 않았을 때는 기존 앵커 가격(oldAnchorPrice)을 그대로 유지합니다.
             let newAnchorPrice = oldAnchorPrice;
-            if (oldAnchorPrice === 0 && isUpDownBought) {
-                newAnchorPrice = currentDayRealBasePrice; 
+            if (isUpDownBought) {
+                newAnchorPrice = nextClosePrice;
+            } else if (oldAnchorPrice === 0) {
+                newAnchorPrice = currentDayRealBasePrice;
             }
 
             let newQty = oldQty + newlyBoughtUpDownQty - soldUpDownQty;
