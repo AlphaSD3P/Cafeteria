@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V64 독립 분리 및 잔여 명칭 변경판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V65 스마트 통폐합판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -173,7 +173,7 @@
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; }
         .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #3b82f6; padding-left: 8px; }
         
         .order-table { width: 100%; border-collapse: collapse; text-align: center; background: white; margin-bottom: 8px; font-size: 12px; }
@@ -238,7 +238,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V64 - 독립 분리 및 잔여 명칭 변경판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V65 - 스마트 통폐합판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -364,13 +364,7 @@
 
             <div class="orders-container">
                 <div class="result-section">
-                    <div class="result-title-buy">
-                        <span>생성된 매수 주문 (LOC) 미리보기</span>
-                        <div style="font-size: 11px; font-weight: normal; color: #475569; display: flex; gap: 8px; align-items: center;">
-                            <span>추가 기준 수량: <input type="number" id="addStepQty" value="1" min="1" style="width: 45px; text-align: center; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px;" oninput="generateTable()"></span>
-                            <span>잔여 기준 수량: <input type="number" id="remainderStepQty" value="1" min="1" style="width: 45px; text-align: center; padding: 2px; border: 1px solid #cbd5e1; border-radius: 4px;" oninput="generateTable()"></span>
-                        </div>
-                    </div>
+                    <div class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</div>
                     <div id="buyResultArea">
                         <div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
                     </div>
@@ -761,7 +755,7 @@
             return { remainingCash, remainingSteps, totalAsset };
         }
 
-        // [독립 분리된 매수 주문 생성 루틴]
+        // [V65 스마트 통폐합 매수 주문 생성 루틴]
         window.generateTable = function() {
             if(!window.currentActiveStrategy) return;
             autoSaveState();
@@ -774,10 +768,6 @@
             const currentStep = parseInt(document.getElementById('currentStep').value);
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
-            
-            // 독립 제어 수량 입력값 가져오기
-            const addQtyStep = parseInt(document.getElementById('addStepQty').value) || 1;
-            const remainderQtyStep = parseInt(document.getElementById('remainderStepQty').value) || 1;
 
             if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
@@ -789,64 +779,39 @@
             window.globalPendingSells = [];
 
             let limitPrice = basePrice * 0.80; 
-            let merged = new Map();
+            let rawBuys = []; // 개별 수집용 배열
 
-            function getDropPercentText(targetPrice, currentClose) {
-                let diff = ((targetPrice - currentClose) / currentClose) * 100;
-                return `추가 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
-            }
-
-            function getRemainderPercentText(targetPrice, currentClose) {
-                let diff = ((targetPrice - currentClose) / currentClose) * 100;
-                return `잔여 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
-            }
-
-            function addOrder(type, label, p, q) {
+            function addRawOrder(type, label, p, q) {
                 if (q <= 0 || p <= 0) return;
-                window.globalPendingBuys.push({
+                rawBuys.push({
                     category: type === 'A' ? 'drop' : 'updown',
+                    type: type, // 'A': 잔여/떨법 계열, 'B': 추가/업다운 계열
                     label: label,
                     price: parseFloat(p.toFixed(2)),
                     qty: q
                 });
-
-                let key = p.toFixed(2);
-                if (!merged.has(key)) {
-                    merged.set(key, { price: parseFloat(key), qtyA: 0, qtyB: 0, labelA: '', labelB: '' });
-                }
-                let entry = merged.get(key);
-                if (type === 'A') {
-                    entry.qtyA += q;
-                    entry.labelA = label;
-                } else {
-                    entry.qtyB += q;
-                    entry.labelB = label;
-                }
             }
 
-            // [독립 축 1] 떨법 매수 및 잔여 주문 생성 로직
+            // 1. 떨법 및 잔여(하단 방어) 원본 수집
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
                 if (pA >= limitPrice && qA > 0) {
-                    addOrder('A', '떨법', pA, qA);
-                    let nA = qA + remainderQtyStep; // 잔여 기준 수량으로 독립 제어
+                    addRawOrder('A', '떨법', pA, qA);
+                    let nA = qA + 1;
                     while (true) {
                         let p = buyAmount / nA;
                         if (p < limitPrice || nA > 10000) break;
                         if (p < pA) {
-                            let percentText = getDropPercentText(p, basePrice);
-                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
-                                percentText = `추가 (0.0%)`;
-                            }
-                            addOrder('A', getRemainderPercentText(p, basePrice), p, remainderQtyStep);
+                            let diff = ((p - basePrice) / basePrice) * 100;
+                            addRawOrder('A', `통합방어 (${diff.toFixed(1)}%)`, p, 1);
                         }
-                        nA += remainderQtyStep;
+                        nA++;
                     }
                 }
             }
 
-            // [독립 축 2] 업다운 및 추가 주문 생성 로직
+            // 2. 업다운 및 추가(상단 추가) 원본 수집
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -864,52 +829,127 @@
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
-                addOrder('B', '업다운', pB, qB);
+                addRawOrder('B', '업다운', pB, qB);
                 
-                let nB = qB + addQtyStep; // 추가 기준 수량으로 독립 제어
+                let nB = qB + 1;
                 while (true) {
                     let p = buyAmount / nB;
                     let cashCheck = Math.floor(summary.remainingCash / p);
                     if (p < limitPrice || nB > 10000 || nB > cashCheck) break;
                     if (p < pB) {
-                        addOrder('B', getDropPercentText(p, basePrice), p, addQtyStep);
+                        let diff = ((p - basePrice) / basePrice) * 100;
+                        addRawOrder('B', `추가 (+${diff.toFixed(1)}%)`, p, 1);
                     }
-                    nB += addQtyStep;
+                    nB++;
                 }
             }
 
-            let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 상단 '추가'와 하단 '잔여' 주문이 각자 독립된 기준 수량에 맞춰 계산됩니다.</div>`;
+            // ==========================================
+            // [스마트 통폐합 로직 적용]
+            // ==========================================
+            let finalProcessedBuys = [];
 
-            if (finalOrders.length > 0) {
+            // A그룹 (하단 통합방어/잔여 계열): 떨법 제외하고 방어 줄 수만 필터링
+            let defenseOrders = rawBuys.filter(o => o.category === 'drop' && o.label !== '떨법');
+            let dropOrder = rawBuys.find(o => o.label === '떨법');
+
+            if (dropOrder) finalProcessedBuys.push(dropOrder);
+
+            if (defenseOrders.length > 5) {
+                // 5줄 초과 시 인접 가격대끼리 2개씩 묶어서 통폐합 압축 (최대 5줄 유지)
+                let compressedDefense = [];
+                for (let i = 0; i < defenseOrders.length; i += 2) {
+                    let first = defenseOrders[i];
+                    let second = defenseOrders[i+1];
+                    if (second) {
+                        // 두 가격 중 더 낮은 가격(또는 대표 가격)에 수량을 합산
+                        compressedDefense.push({
+                            category: 'drop',
+                            type: 'A',
+                            label: second.label,
+                            price: second.price,
+                            qty: first.qty + second.qty
+                        });
+                    } else {
+                        compressedDefense.push(first);
+                    }
+                }
+                // 만약 압축 후에도 5줄이 넘으면 한 번 더 압축하여 최대 5줄 보장
+                while (compressedDefense.length > 5) {
+                    let temp = [];
+                    for (let i = 0; i < compressedDefense.length; i += 2) {
+                        let f = compressedDefense[i];
+                        let s = compressedDefense[i+1];
+                        if (s) {
+                            temp.push({
+                                category: 'drop',
+                                type: 'A',
+                                label: s.label,
+                                price: s.price,
+                                qty: f.qty + s.qty
+                            });
+                        } else {
+                            temp.push(f);
+                        }
+                    }
+                    compressedDefense = temp;
+                }
+                compressedDefense.forEach(o => finalProcessedBuys.push(o));
+            } else {
+                defenseOrders.forEach(o => finalProcessedBuys.push(o));
+            }
+
+            // B그룹 (상단 업다운/추가 계열): 업다운 제외하고 추가 줄 필터링
+            let addOrders = rawBuys.filter(o => o.category === 'updown' && o.label !== '업다운');
+            let updownOrder = rawBuys.find(o => o.label === '업다운');
+
+            if (updownOrder) finalProcessedBuys.push(updownOrder);
+
+            if (addOrders.length > 2) {
+                // 추가 주문이 2줄을 넘어가면 한 줄로 통폐합 (가장 하단 또는 대표 가격에 수량 몰아주기)
+                let totalAddQty = addOrders.reduce((sum, o) => sum + o.qty, 0);
+                let representativeOrder = addOrders[addOrders.length - 1]; // 가장 아래쪽 가격 기준
+                finalProcessedBuys.push({
+                    category: 'updown',
+                    type: 'B',
+                    label: `추가`,
+                    price: representativeOrder.price,
+                    qty: totalAddQty
+                });
+            } else {
+                addOrders.forEach(o => finalProcessedBuys.push(o));
+            }
+
+            // 전역 등록용 복사
+            window.globalPendingBuys = finalProcessedBuys.map(o => ({
+                category: o.category,
+                label: o.label,
+                price: o.price,
+                qty: o.qty
+            }));
+
+            // 가격 내림차순 정렬하여 화면 표기
+            finalProcessedBuys.sort((a, b) => b.price - a.price);
+
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 추가 주문이 2줄 초과 시 1줄로 통폐합되며, 통합방어는 최대 5줄 이내로 자동 압축됩니다.</div>`;
+
+            if (finalProcessedBuys.length > 0) {
                 buyHtml += `<table class="order-table">
                     <tr><th>구분</th><th>LOC 매수 단가($)</th><th>주문 수량</th></tr>`;
                 
-                finalOrders.forEach(order => {
-                    let finalLabel = '';
-                    let finalClass = '';
-                    let totalQ = order.qtyA + order.qtyB;
-
-                    if (order.qtyA > 0 && order.qtyB > 0) {
-                        let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
-                        finalLabel = percentText ? `통합방어 (${percentText})` : `통합방어`;
-                        finalClass = 'label-joint';
-                    } else if (order.qtyA > 0) {
-                        finalLabel = order.labelA;
-                        finalClass = 'label-drop';
-                    } else {
-                        finalLabel = order.labelB;
-                        finalClass = 'label-updown';
-                    }
-
-                    if (order.labelA === '떨법') finalClass = 'label-drop';
-                    if (order.labelB === '업다운') finalClass = 'label-updown';
+                finalProcessedBuys.forEach(order => {
+                    let finalLabel = order.label;
+                    let finalClass = 'label-updown';
+                    if (order.category === 'drop') finalClass = 'label-drop';
+                    if (order.label === '떨법') finalClass = 'label-drop';
+                    if (order.label === '업다운') finalClass = 'label-updown';
+                    if (order.label.includes('통합방어')) finalClass = 'label-joint';
 
                     buyHtml += `
                         <tr>
                             <td class="${finalClass}">${finalLabel}</td>
                             <td class="price-col">${order.price.toFixed(2)}</td>
-                            <td class="qty-col">${totalQ}</td>
+                            <td class="qty-col">${order.qty}</td>
                         </tr>
                     `;
                 });
