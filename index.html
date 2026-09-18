@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cafeteria & 잔고 일별 기록 시스템 (V66 깔끔 통폐합판)</title>
+    <title>Cafeteria & 잔고 일별 기록 시스템 (V64 주문갭 가변 조절판)</title>
     
     <!-- Firebase SDK -->
     <script type="module">
@@ -125,7 +125,7 @@
         #login-screen h2 { color: #1e3a8a; margin-bottom: 20px; font-size: 22px; }
         .google-login-btn { width: 100%; padding: 12px; background-color: #fff; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
 
-        #app-screen { display: none; width: 100%; max-width: 1250px; background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        #app-screen { display: none; width: 100%; max-width: 1280px; background-color: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .user-info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; background: #f8fafc; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
         .logout-btn { background: none; border: 1px solid #cbd5e1; padding: 5px 10px; border-radius: 4px; cursor: pointer; color: #ef4444; font-weight: bold; font-size: 12px;}
         
@@ -145,7 +145,7 @@
         .tab-content.active-content { display: block; }
 
         .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
-        .top-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
+        .top-row { display: grid; grid-template-columns: repeat(9, 1fr); gap: 8px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
         .triple-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px; }
         
         .card-box { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; box-sizing: border-box; }
@@ -238,7 +238,7 @@
 
         <div class="header">
             <h2>Cafeteria & 알고리즘 자동주문 생성기</h2>
-            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V66 - 깔끔 통폐합판)</div>
+            <div class="subtitle">클라우드 보안 실시간 동기화 시스템 (V64 - 주문갭 가변 조절판)</div>
         </div>
 
         <div class="strategy-tabs" id="strategyTabsContainer"></div>
@@ -284,6 +284,14 @@
                     <div class="input-group">
                         <label>📉 하락간격(%)</label>
                         <input type="number" id="dropRate" step="0.01" value="0" oninput="autoSaveState()">
+                    </div>
+                    <div class="input-group">
+                        <label style="color:#ca8a04;">🟡 추가매수갭(상단)</label>
+                        <input type="number" id="addBuyGap" value="3" min="1" oninput="this.dataset.userModified='true'; autoSaveState(); generateTable();" style="background:#fefce8; font-weight:bold; color:#854d0e;">
+                    </div>
+                    <div class="input-group">
+                        <label style="color:#16a34a;">🟢 방어매수갭(하단)</label>
+                        <input type="number" id="defenseBuyGap" value="1" min="1" oninput="autoSaveState(); generateTable();" style="background:#f0fdf4; font-weight:bold; color:#166534;">
                     </div>
                 </div>
 
@@ -512,6 +520,8 @@
                 totalSteps: 0, 
                 buyAmount: 0, 
                 dropRate: 0, 
+                addBuyGap: 3,
+                defenseBuyGap: 1,
                 basePrice: 0,
                 anchorPrice: 0, 
                 currentStep: 0, 
@@ -558,6 +568,8 @@
                             totalSteps: prev.totalSteps,
                             buyAmount: prev.buyAmount,
                             dropRate: prev.dropRate,
+                            addBuyGap: prev.addBuyGap !== undefined ? prev.addBuyGap : 3,
+                            defenseBuyGap: prev.defenseBuyGap !== undefined ? prev.defenseBuyGap : 1,
                             basePrice: carriedBasePrice,     
                             anchorPrice: carriedAnchorPrice, 
                             currentStep: prev.currentStep,
@@ -592,6 +604,11 @@
             document.getElementById('totalStepsSetting').value = data.totalSteps || 0;
             document.getElementById('buyAmount').value = data.buyAmount !== undefined ? data.buyAmount : 0;
             document.getElementById('dropRate').value = data.dropRate || 0;
+            
+            document.getElementById('addBuyGap').value = data.addBuyGap !== undefined ? data.addBuyGap : 3;
+            document.getElementById('defenseBuyGap').value = data.defenseBuyGap !== undefined ? data.defenseBuyGap : 1;
+            delete document.getElementById('addBuyGap').dataset.userModified;
+
             document.getElementById('basePrice').value = data.basePrice || 0;
             document.getElementById('anchorPrice').value = data.anchorPrice !== undefined ? data.anchorPrice : 0;
             document.getElementById('currentStep').value = data.currentStep || 0;
@@ -662,6 +679,8 @@
                 totalSteps: parseInt(document.getElementById('totalStepsSetting').value) || 0,
                 buyAmount: parseFloat(document.getElementById('buyAmount').value) || 0,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0,
+                addBuyGap: parseInt(document.getElementById('addBuyGap').value) || 1,
+                defenseBuyGap: parseInt(document.getElementById('defenseBuyGap').value) || 1,
                 basePrice: parseFloat(document.getElementById('basePrice').value) || 0,
                 anchorPrice: anchorPriceVal,
                 currentStep: parseInt(document.getElementById('currentStep').value) || 0,
@@ -755,7 +774,6 @@
             return { remainingCash, remainingSteps, totalAsset };
         }
 
-        // [V66 깔끔 통폐합 매수 주문 생성 루틴]
         window.generateTable = function() {
             if(!window.currentActiveStrategy) return;
             autoSaveState();
@@ -769,6 +787,25 @@
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
 
+            let addBuyGap = parseInt(document.getElementById('addBuyGap').value);
+            if (isNaN(addBuyGap) || addBuyGap < 1) addBuyGap = 1;
+
+            let defenseBuyGap = parseInt(document.getElementById('defenseBuyGap').value);
+            if (isNaN(defenseBuyGap) || defenseBuyGap < 1) defenseBuyGap = 1;
+
+            // 0회차 시 추가매수갭 자동산출 (사용자가 직접 수정한 경우가 아닐 때)
+            if (currentStep === 0 && basePrice > 0 && buyAmount > 0) {
+                let pA_base = basePrice - 0.01 > 0 ? basePrice - 0.01 : basePrice;
+                let qA_base = Math.floor(buyAmount / pA_base);
+                let pB_base = basePrice * 1.10;
+                let qB_base = Math.floor(buyAmount / pB_base);
+                let autoGap = qA_base - qB_base;
+                if (autoGap > 0 && !document.getElementById('addBuyGap').dataset.userModified) {
+                    addBuyGap = autoGap;
+                    document.getElementById('addBuyGap').value = autoGap;
+                }
+            }
+
             if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
                 document.getElementById('sellResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
@@ -779,39 +816,61 @@
             window.globalPendingSells = [];
 
             let limitPrice = basePrice * 0.80; 
-            let rawBuys = [];
+            let merged = new Map();
 
-            function addRawOrder(type, label, p, q) {
+            function getDropPercentText(targetPrice, currentClose) {
+                let diff = ((targetPrice - currentClose) / currentClose) * 100;
+                return `추가 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
+            }
+
+            function addOrder(type, label, p, q) {
                 if (q <= 0 || p <= 0) return;
-                rawBuys.push({
+                window.globalPendingBuys.push({
                     category: type === 'A' ? 'drop' : 'updown',
-                    type: type,
                     label: label,
                     price: parseFloat(p.toFixed(2)),
                     qty: q
                 });
+
+                let key = p.toFixed(2);
+                if (!merged.has(key)) {
+                    merged.set(key, { price: parseFloat(key), qtyA: 0, qtyB: 0, labelA: '', labelB: '' });
+                }
+                let entry = merged.get(key);
+                if (type === 'A') {
+                    entry.qtyA += q;
+                    entry.labelA = label;
+                } else {
+                    entry.qtyB += q;
+                    entry.labelB = label;
+                }
             }
 
-            // 1. 떨법 및 통합방어 원본 수집
+            // 1. 떨법 매수 로직 (종가 - 0.01) - 방어매수갭 적용
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
                 let qA = Math.floor(buyAmount / pA);
                 if (pA >= limitPrice && qA > 0) {
-                    addRawOrder('A', '떨법', pA, qA);
-                    let nA = qA + 1;
+                    addOrder('A', '떨법', pA, qA);
+                    let nA = qA;
                     while (true) {
-                        let p = buyAmount / nA;
-                        if (p < limitPrice || nA > 10000) break;
+                        let nextNA = nA + defenseBuyGap;
+                        let stepQty = defenseBuyGap;
+                        let p = buyAmount / nextNA;
+                        if (p < limitPrice || nextNA > 10000) break;
                         if (p < pA) {
-                            let diff = ((p - basePrice) / basePrice) * 100;
-                            addRawOrder('A', `통합방어 (${diff.toFixed(1)}%)`, p, 1);
+                            let percentText = getDropPercentText(p, basePrice);
+                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
+                                percentText = `추가 (0.0%)`;
+                            }
+                            addOrder('A', percentText, p, stepQty);
                         }
-                        nA++;
+                        nA = nextNA;
                     }
                 }
             }
 
-            // 2. 업다운 원본 수집 (지저분한 '추가' 주문 루프는 완전 배제)
+            // 2. 업다운 매수 로직 - 추가매수갭 & 방어매수갭 적용
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
             let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
@@ -829,104 +888,68 @@
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
-                addRawOrder('B', '업다운', pB, qB);
+                addOrder('B', '업다운', pB, qB);
+                
+                let nB = qB;
+                let basePriceQty = Math.floor(buyAmount / basePrice);
+
+                while (true) {
+                    let currentGap = (nB < basePriceQty) ? addBuyGap : defenseBuyGap;
+                    let nextNB = nB + currentGap;
+                    
+                    if (nB < basePriceQty && nextNB > basePriceQty) {
+                        nextNB = basePriceQty;
+                    }
+
+                    let stepQty = nextNB - nB;
+                    if (stepQty <= 0) stepQty = 1;
+
+                    let p = buyAmount / nextNB;
+                    let cashCheck = Math.floor(summary.remainingCash / p);
+                    
+                    if (p < limitPrice || nextNB > 10000 || nextNB > cashCheck) break;
+
+                    if (p < pB) {
+                        let percentText = getDropPercentText(p, basePrice);
+                        addOrder('B', percentText, p, stepQty);
+                    }
+
+                    nB = nextNB;
+                }
             }
 
-            // ==========================================
-            // [스마트 통폐합: 통합방어 최대 5줄 제한 및 찌꺼기 제거]
-            // ==========================================
-            let finalProcessedBuys = [];
+            let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 상단 구간(추가매수갭: ${addBuyGap}주) 및 하단 구간(방어매수갭: ${defenseBuyGap}주)이 반영된 주문 테이블입니다.</div>`;
 
-            let dropOrder = rawBuys.find(o => o.label === '떨법');
-            if (dropOrder) finalProcessedBuys.push(dropOrder);
-
-            let defenseOrders = rawBuys.filter(o => o.category === 'drop' && o.label !== '떨법');
-
-            // 찌꺼기(1개짜리 등)가 엉뚱하게 남지 않도록 유의미한 묶음 처리 및 5줄 제한 압축
-            if (defenseOrders.length > 5) {
-                let compressedDefense = [];
-                for (let i = 0; i < defenseOrders.length; i += 2) {
-                    let first = defenseOrders[i];
-                    let second = defenseOrders[i+1];
-                    if (second) {
-                        compressedDefense.push({
-                            category: 'drop',
-                            type: 'A',
-                            label: second.label,
-                            price: second.price,
-                            qty: first.qty + second.qty
-                        });
-                    } else {
-                        // 남은 홀수 개체는 앞 항목과 병합하여 찌꺼기 발생 원천 차단
-                        if (compressedDefense.length > 0) {
-                            let last = compressedDefense[compressedDefense.length - 1];
-                            last.qty += first.qty;
-                        } else {
-                            compressedDefense.push(first);
-                        }
-                    }
-                }
-                while (compressedDefense.length > 5) {
-                    let temp = [];
-                    for (let i = 0; i < compressedDefense.length; i += 2) {
-                        let f = compressedDefense[i];
-                        let s = compressedDefense[i+1];
-                        if (s) {
-                            temp.push({
-                                category: 'drop',
-                                type: 'A',
-                                label: s.label,
-                                price: s.price,
-                                qty: f.qty + s.qty
-                            });
-                        } else {
-                            if (temp.length > 0) {
-                                temp[temp.length - 1].qty += f.qty;
-                            } else {
-                                temp.push(f);
-                            }
-                        }
-                    }
-                    compressedDefense = temp;
-                }
-                compressedDefense.forEach(o => finalProcessedBuys.push(o));
-            } else {
-                defenseOrders.forEach(o => finalProcessedBuys.push(o));
-            }
-
-            let updownOrder = rawBuys.find(o => o.label === '업다운');
-            if (updownOrder) finalProcessedBuys.push(updownOrder);
-
-            // 전역 등록용 복사
-            window.globalPendingBuys = finalProcessedBuys.map(o => ({
-                category: o.category,
-                label: o.label,
-                price: o.price,
-                qty: o.qty
-            }));
-
-            // 가격 내림차순 정렬
-            finalProcessedBuys.sort((a, b) => b.price - a.price);
-
-            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 불필요한 추가 주문은 제외되었으며, 통합방어는 최대 5줄 이내로 깔끔하게 압축됩니다.</div>`;
-
-            if (finalProcessedBuys.length > 0) {
+            if (finalOrders.length > 0) {
                 buyHtml += `<table class="order-table">
                     <tr><th>구분</th><th>LOC 매수 단가($)</th><th>주문 수량</th></tr>`;
                 
-                finalProcessedBuys.forEach(order => {
-                    let finalLabel = order.label;
-                    let finalClass = 'label-updown';
-                    if (order.category === 'drop') finalClass = 'label-drop';
-                    if (order.label === '떨법') finalClass = 'label-drop';
-                    if (order.label === '업다운') finalClass = 'label-updown';
-                    if (order.label.includes('통합방어')) finalClass = 'label-joint';
+                finalOrders.forEach(order => {
+                    let finalLabel = '';
+                    let finalClass = '';
+                    let totalQ = order.qtyA + order.qtyB;
+
+                    if (order.qtyA > 0 && order.qtyB > 0) {
+                        let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
+                        finalLabel = percentText ? `추가방어 (${percentText})` : `추가방어`;
+                        finalClass = 'label-joint';
+                    } else if (order.qtyA > 0) {
+                        finalLabel = order.labelA;
+                        finalClass = 'label-drop';
+                    } else {
+                        finalLabel = order.labelB;
+                        finalClass = 'label-updown';
+                    }
+
+                    if (order.labelA === '떨법') finalClass = 'label-drop';
+                    if (order.labelB === '업다운') finalClass = 'label-updown';
 
                     buyHtml += `
                         <tr>
                             <td class="${finalClass}">${finalLabel}</td>
                             <td class="price-col">${order.price.toFixed(2)}</td>
-                            <td class="qty-col">${order.qty}</td>
+                            <td class="qty-col">${totalQ}</td>
                         </tr>
                     `;
                 });
@@ -936,7 +959,7 @@
             }
             document.getElementById('buyResultArea').innerHTML = buyHtml;
 
-            // 매도 주문 로직
+            // 3. 매도 주문 로직
             let sellHtml = '';
             if (currentStep > 0) {
                 let sellQty = Math.floor(totalQty / currentStep);
@@ -1172,6 +1195,8 @@
                 totalSteps: totalStepsLimit,
                 buyAmount: buyAmountPerStep,
                 dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
+                addBuyGap: parseInt(document.getElementById('addBuyGap').value) || 1,
+                defenseBuyGap: parseInt(document.getElementById('defenseBuyGap').value) || 1,
                 basePrice: currentDayRealBasePrice,
                 anchorPrice: oldAnchorPrice,
                 currentStep: oldStep,
@@ -1202,6 +1227,8 @@
                         totalSteps: totalStepsLimit,
                         buyAmount: buyAmountPerStep,
                         dropRate: parseFloat(document.getElementById('dropRate').value) || 0.25,
+                        addBuyGap: parseInt(document.getElementById('addBuyGap').value) || 1,
+                        defenseBuyGap: parseInt(document.getElementById('defenseBuyGap').value) || 1,
                         basePrice: nextClosePrice, 
                         anchorPrice: newAnchorPrice,
                         currentStep: newStep,
