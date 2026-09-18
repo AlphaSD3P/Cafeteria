@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cafeteria & 잔고 일별 기록 시스템 (V64 주문갭 가변 조절판)</title>
     
+    <!-- Flatpickr (달력 커스텀 라이브러리) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/ko.js"></script>
+
     <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -91,6 +96,7 @@
             document.getElementById('currentDateTab1').value = todayStr;
             
             window.renderDynamicTabs();
+            window.initFlatpickr();
             window.onDateChange();
         }
 
@@ -146,7 +152,7 @@
 
         .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
         .top-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
-        .triple-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        .triple-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 15px; }
         
         .card-box { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; box-sizing: border-box; }
         .card-title { font-weight: bold; color: #475569; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 6px; font-size: 13px; }
@@ -156,11 +162,13 @@
         .input-group label { font-size: 11px; font-weight: bold; }
         .input-group input { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; text-align: right; box-sizing: border-box; width: 100%; }
         .input-group input[readonly] { background-color: #f1f5f9; color: #64748b; cursor: not-allowed; }
-        .input-group input[type="date"] { text-align: center; }
+        .input-group input[type="text"].flatpickr-input { text-align: center; cursor: pointer; background-color: white; }
 
-        .drop-row-item { display: grid; grid-template-columns: 45px 1fr 55px 95px; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 12px; font-weight: bold; color: #334155; }
-        .drop-row-item input { font-size: 12px !important; padding: 6px 8px !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important; text-align: right !important; background-color: #f8fafc !important; color: #1e3a8a !important; font-weight: bold !important; }
-        .drop-row-item input[type="date"] { text-align: center !important; }
+        /* 떨법 보유 물량 영역 레이아웃 최적화 */
+        #dropHoldingsContainer { max-height: 290px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
+        .drop-row-item { display: grid; grid-template-columns: 42px 1fr 48px 105px; gap: 4px; align-items: center; margin-bottom: 6px; font-size: 11px; font-weight: bold; color: #334155; }
+        .drop-row-item input { font-size: 11px !important; padding: 5px 4px !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important; text-align: right !important; background-color: #f8fafc !important; color: #1e3a8a !important; font-weight: bold !important; box-sizing: border-box; width: 100%; }
+        .drop-row-item input.drop-date { text-align: center !important; font-size: 11px !important; padding: 5px 2px !important; }
 
         .action-row { display: flex; gap: 12px; margin-top: 15px; flex-wrap: nowrap; }
         .action-row button { display: flex; align-items: center; justify-content: center; white-space: nowrap; }
@@ -177,7 +185,6 @@
         .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; border-left: 4px solid #ef4444; padding-left: 8px; margin: 0; }
         .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #3b82f6; padding-left: 8px; }
         
-        /* LOC 미리보기 우측 상단 갭 제어 컨트롤 스타일 */
         .gap-control-box { display: flex; gap: 10px; align-items: center; background: #fff; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; }
         .gap-control-item { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: bold; }
         .gap-control-item input { width: 48px; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; text-align: right; font-weight: bold; }
@@ -227,6 +234,18 @@
 
         .manage-list { max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
         .manage-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
+
+        /* Flatpickr 달력 커스텀 스타일 (종가 입력된 날짜 빨간색 하이라이트) */
+        .flatpickr-day.has-record {
+            background-color: #fee2e2 !important;
+            color: #dc2626 !important;
+            font-weight: bold !important;
+            border-radius: 6px !important;
+        }
+        .flatpickr-day.has-record.selected {
+            background-color: #dc2626 !important;
+            color: #ffffff !important;
+        }
     </style>
 </head>
 <body>
@@ -265,7 +284,7 @@
                 <div class="top-row">
                     <div class="input-group">
                         <label>📅 현재 거래일</label>
-                        <input type="date" id="currentDate" onchange="onDateChange()">
+                        <input type="text" id="currentDate" readonly>
                     </div>
                     <div class="input-group">
                         <label>💰 기준 운용금액($)</label>
@@ -356,7 +375,7 @@
                         <div class="card-title">
                             <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
                         </div>
-                        <div id="dropHoldingsContainer" style="max-height: 295px; overflow-y: auto;">
+                        <div id="dropHoldingsContainer">
                         </div>
                     </div>
                 </div>
@@ -373,7 +392,6 @@
                     <div class="result-header">
                         <h3 class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</h3>
                         
-                        <!-- 우측 상단으로 이동 배치된 갭 제어 입력 영역 -->
                         <div class="gap-control-box">
                             <div class="gap-control-item" style="color: #854d0e;">
                                 <span>🟡 상단갭</span>
@@ -405,7 +423,7 @@
             <div class="top-input-bar">
                 <div class="input-item">
                     <span>📅 기록 날짜 보기</span>
-                    <input type="date" id="currentDateTab1" onchange="document.getElementById('currentDate').value = this.value; window.onDateChange();">
+                    <input type="text" id="currentDateTab1" readonly>
                 </div>
                 <div class="input-item">
                     <span>환율(원/달러)</span>
@@ -466,6 +484,9 @@
         window.globalPendingBuys = [];
         window.globalPendingSells = [];
 
+        window.fpCurrentDate = null;
+        window.fpCurrentDateTab1 = null;
+
         function getTodayStr() {
             let d = new Date();
             let offset = d.getTimezoneOffset() * 60000;
@@ -484,6 +505,66 @@
             let offset = d.getTimezoneOffset() * 60000;
             return (new Date(d - offset)).toISOString().split('T')[0];
         }
+
+        /* Flatpickr 달력 생성 및 종가 기록된 날짜 빨간색 표시 로직 */
+        window.initFlatpickr = function() {
+            if (window.fpCurrentDate) window.fpCurrentDate.destroy();
+            if (window.fpCurrentDateTab1) window.fpCurrentDateTab1.destroy();
+
+            window.fpCurrentDate = flatpickr("#currentDate", {
+                locale: "ko",
+                dateFormat: "Y-m-d",
+                defaultDate: document.getElementById('currentDate').value || getTodayStr(),
+                onChange: function(selectedDates, dateStr) {
+                    document.getElementById('currentDate').value = dateStr;
+                    if (window.fpCurrentDateTab1) window.fpCurrentDateTab1.setDate(dateStr, false);
+                    window.onDateChange();
+                },
+                onOpen: function(selectedDates, dateStr, instance) {
+                    instance.redraw();
+                },
+                onDayCreate: function(dObj, dStr, fp, dayElem) {
+                    const dateStr = fp.formatDate(dayElem.dateObj, "Y-m-d");
+                    const currentSt = window.currentActiveStrategy;
+                    if (window.dailyDatabase && window.dailyDatabase[dateStr] && window.dailyDatabase[dateStr][currentSt]) {
+                        const stData = window.dailyDatabase[dateStr][currentSt];
+                        if (stData && stData.basePrice && stData.basePrice > 0) {
+                            dayElem.classList.add("has-record");
+                        }
+                    }
+                }
+            });
+
+            window.fpCurrentDateTab1 = flatpickr("#currentDateTab1", {
+                locale: "ko",
+                dateFormat: "Y-m-d",
+                defaultDate: document.getElementById('currentDateTab1').value || getTodayStr(),
+                onChange: function(selectedDates, dateStr) {
+                    document.getElementById('currentDateTab1').value = dateStr;
+                    document.getElementById('currentDate').value = dateStr;
+                    if (window.fpCurrentDate) window.fpCurrentDate.setDate(dateStr, false);
+                    window.onDateChange();
+                },
+                onOpen: function(selectedDates, dateStr, instance) {
+                    instance.redraw();
+                },
+                onDayCreate: function(dObj, dStr, fp, dayElem) {
+                    const dateStr = fp.formatDate(dayElem.dateObj, "Y-m-d");
+                    if (window.dailyDatabase && window.dailyDatabase[dateStr]) {
+                        let hasRecord = false;
+                        for (let st in window.dailyDatabase[dateStr]) {
+                            if (st !== '_meta' && window.dailyDatabase[dateStr][st].basePrice > 0) {
+                                hasRecord = true;
+                                break;
+                            }
+                        }
+                        if (hasRecord) {
+                            dayElem.classList.add("has-record");
+                        }
+                    }
+                }
+            });
+        };
 
         window.switchMainTab = function(index) {
             document.querySelectorAll('.main-tabs div').forEach((t, i) => t.classList.toggle('active', i === index));
@@ -516,7 +597,9 @@
                 if (st === window.currentActiveStrategy) btn.classList.add('active');
                 btn.onclick = () => {
                     window.currentActiveStrategy = st;
-                    document.getElementById('currentDate').value = getValidBusinessDay(window.strategyDates[st] || getTodayStr()); 
+                    const validDate = getValidBusinessDay(window.strategyDates[st] || getTodayStr());
+                    document.getElementById('currentDate').value = validDate; 
+                    if (window.fpCurrentDate) window.fpCurrentDate.setDate(validDate, false);
                     window.renderDynamicTabs();
                     window.onDateChange();
                     window.switchMainTab(0);
@@ -552,6 +635,7 @@
             let validDateStr = getValidBusinessDay(dateStr);
             if (validDateStr !== dateStr) {
                 document.getElementById('currentDate').value = validDateStr;
+                if (window.fpCurrentDate) window.fpCurrentDate.setDate(validDateStr, false);
                 dateStr = validDateStr;
             }
 
@@ -605,6 +689,9 @@
             } else {
                 applyDataToForm(getDefaultStrategyData());
             }
+
+            if (window.fpCurrentDate) window.fpCurrentDate.redraw();
+            if (window.fpCurrentDateTab1) window.fpCurrentDateTab1.redraw();
             
             generateTable();
             updateSummaryDashboard();
@@ -662,7 +749,7 @@
                     <span style="font-weight:bold; color:#64748b;">떨법${idx + 1}</span>
                     <input type="number" step="0.01" class="drop-price" readonly value="${d.price}">
                     <input type="number" class="drop-qty" readonly value="${d.qty}">
-                    <input type="date" class="drop-date" readonly value="${d.date}">
+                    <input type="text" class="drop-date" readonly value="${d.date}">
                 `;
                 container.appendChild(row);
             });
@@ -789,289 +876,283 @@
         }
 
         window.generateTable = function() {
-    if(!window.currentActiveStrategy) return;
-    autoSaveState();
-    let summary = updateSummaryDashboard();
+            if(!window.currentActiveStrategy) return;
+            autoSaveState();
+            let summary = updateSummaryDashboard();
 
-    const basePrice = parseFloat(document.getElementById('basePrice').value);
-    const anchorPrice = parseFloat(document.getElementById('anchorPrice').value) || 0; 
-    const dropRate = parseFloat(document.getElementById('dropRate').value) || 0.25;
-    const buyAmount = parseFloat(document.getElementById('buyAmount').value);
-    const currentStep = parseInt(document.getElementById('currentStep').value);
-    const totalQty = parseInt(document.getElementById('totalQty').value);
-    const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
+            const basePrice = parseFloat(document.getElementById('basePrice').value);
+            const anchorPrice = parseFloat(document.getElementById('anchorPrice').value) || 0; 
+            const dropRate = parseFloat(document.getElementById('dropRate').value) || 0.25;
+            const buyAmount = parseFloat(document.getElementById('buyAmount').value);
+            const currentStep = parseInt(document.getElementById('currentStep').value);
+            const totalQty = parseInt(document.getElementById('totalQty').value);
+            const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
 
-    let addBuyGap = parseInt(document.getElementById('addBuyGap').value);
-    if (isNaN(addBuyGap) || addBuyGap < 1) addBuyGap = 1;
+            let addBuyGap = parseInt(document.getElementById('addBuyGap').value);
+            if (isNaN(addBuyGap) || addBuyGap < 1) addBuyGap = 1;
 
-    let defenseBuyGap = parseInt(document.getElementById('defenseBuyGap').value);
-    if (isNaN(defenseBuyGap) || defenseBuyGap < 1) defenseBuyGap = 1;
+            let defenseBuyGap = parseInt(document.getElementById('defenseBuyGap').value);
+            if (isNaN(defenseBuyGap) || defenseBuyGap < 1) defenseBuyGap = 1;
 
-    // --- 상단갭(추가매수갭) 자동 계산 및 범위 제한 ---
-    if (basePrice > 0 && buyAmount > 0) {
-        let currentDropsCount = getDropsFromScreen().length;
-        let combinedStep = currentStep + currentDropsCount;
-        let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
+            if (basePrice > 0 && buyAmount > 0) {
+                let currentDropsCount = getDropsFromScreen().length;
+                let combinedStep = currentStep + currentDropsCount;
+                let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
 
-        let pA_base = basePrice - 0.01 > 0 ? basePrice - 0.01 : basePrice;
-        let qA_base = Math.floor(buyAmount / pA_base);
+                let pA_base = basePrice - 0.01 > 0 ? basePrice - 0.01 : basePrice;
+                let qA_base = Math.floor(buyAmount / pA_base);
 
-        let pB_base = 0;
-        if (currentStep === 0) {
-            pB_base = basePrice * 1.10; 
-        } else {
-            let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
-            pB_base = effectiveAnchor * (1 - (dropRate * effectiveStepForOrder) / 100);
-        }
-        let qB_base = pB_base > 0 ? Math.floor(buyAmount / pB_base) : 0;
+                let pB_base = 0;
+                if (currentStep === 0) {
+                    pB_base = basePrice * 1.10; 
+                } else {
+                    let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
+                    pB_base = effectiveAnchor * (1 - (dropRate * effectiveStepForOrder) / 100);
+                }
+                let qB_base = pB_base > 0 ? Math.floor(buyAmount / pB_base) : 0;
 
-        // 떨법과 업다운 사이의 실제 수량 차이 간격
-        let autoGap = Math.abs(qA_base - qB_base);
-        let maxGap = autoGap > 0 ? autoGap : 1;
+                let autoGap = Math.abs(qA_base - qB_base);
+                let maxGap = autoGap > 0 ? autoGap : 1;
 
-        // input 태그의 max/min 범위 제어
-        let addBuyGapInput = document.getElementById('addBuyGap');
-        if (addBuyGapInput) {
-            addBuyGapInput.max = maxGap;
-            addBuyGapInput.min = 1;
-        }
-
-        // 수동 변경이 없을 경우 기본값으로 세팅, 수동 입력 시 maxGap을 넘지 못하도록 제한
-        if (!document.getElementById('addBuyGap').dataset.userModified) {
-            addBuyGap = maxGap;
-            if (addBuyGapInput) addBuyGapInput.value = addBuyGap;
-        } else {
-            if (addBuyGap > maxGap) {
-                addBuyGap = maxGap;
-                if (addBuyGapInput) addBuyGapInput.value = addBuyGap;
-            }
-        }
-    }
-
-    if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
-        document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
-        document.getElementById('sellResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
-        return;
-    }
-
-    window.globalPendingBuys = [];
-    window.globalPendingSells = [];
-
-    let limitPrice = basePrice * 0.80; 
-    let merged = new Map();
-
-    function getDropPercentText(targetPrice, currentClose) {
-        let diff = ((targetPrice - currentClose) / currentClose) * 100;
-        return `추가 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
-    }
-
-    function addOrder(type, label, p, q) {
-        if (q <= 0 || p <= 0) return;
-        window.globalPendingBuys.push({
-            category: type === 'A' ? 'drop' : 'updown',
-            label: label,
-            price: parseFloat(p.toFixed(2)),
-            qty: q
-        });
-
-        let key = p.toFixed(2);
-        if (!merged.has(key)) {
-            merged.set(key, { price: parseFloat(key), qtyA: 0, qtyB: 0, labelA: '', labelB: '' });
-        }
-        let entry = merged.get(key);
-        if (type === 'A') {
-            entry.qtyA += q;
-            entry.labelA = label;
-        } else {
-            entry.qtyB += q;
-            entry.labelB = label;
-        }
-    }
-
-    // --- 업다운 기준 단가 및 수량 산출 ---
-    let currentDropsCount = getDropsFromScreen().length;
-    let combinedStep = currentStep + currentDropsCount;
-    let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
-
-    let pB = 0;
-    if (currentStep === 0) {
-        pB = basePrice * 1.10; 
-    } else {
-        let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
-        pB = effectiveAnchor * (1 - (dropRate * effectiveStepForOrder) / 100);
-    }
-    
-    let maxQtyByCash = pB > 0 ? Math.floor(summary.remainingCash / pB) : 0;
-    let qB = Math.floor(buyAmount / pB);
-    if (qB > maxQtyByCash) qB = maxQtyByCash;
-
-    // 1. 떨법 매수 로직 (상단 갭 분할 메우기 적용)
-    if (summary.remainingSteps >= 2.0) {
-        let pA = basePrice - 0.01;
-        let qA = Math.floor(buyAmount / pA);
-
-        if (pA >= limitPrice && qA > 0) {
-            addOrder('A', '떨법', pA, qA);
-            let nA = qA;
-
-            let isReversed = (currentStep > 0) && (pB > 0) && (pB < pA) && (qA < qB);
-            let targetSyncQty = qB; 
-
-            while (true) {
-                let stepQty = defenseBuyGap;
-
-                // [추가매수 구간]: 지정된 addBuyGap만큼 분할 메우고, 남은 수량(차액)을 마지막 단계에 할당
-                if (isReversed && nA < targetSyncQty) {
-                    stepQty = Math.min(addBuyGap, targetSyncQty - nA);
+                let addBuyGapInput = document.getElementById('addBuyGap');
+                if (addBuyGapInput) {
+                    addBuyGapInput.max = maxGap;
+                    addBuyGapInput.min = 1;
                 }
 
-                let nextNA = nA + stepQty;
-                let p = buyAmount / nextNA;
-
-                if (p < limitPrice || nextNA > 10000) break;
-
-                if (p < pA) {
-                    let percentText = getDropPercentText(p, basePrice);
-                    if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
-                        percentText = `추가 (0.0%)`;
+                if (!document.getElementById('addBuyGap').dataset.userModified) {
+                    addBuyGap = maxGap;
+                    if (addBuyGapInput) addBuyGapInput.value = addBuyGap;
+                } else {
+                    if (addBuyGap > maxGap) {
+                        addBuyGap = maxGap;
+                        if (addBuyGapInput) addBuyGapInput.value = addBuyGap;
                     }
-                    addOrder('A', percentText, p, stepQty);
-                }
-
-                nA = nextNA;
-
-                if (isReversed && nA >= targetSyncQty) {
-                    isReversed = false;
                 }
             }
-        }
-    }
 
-    // 2. 업다운 매수 로직
-    if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
-        addOrder('B', '업다운', pB, qB);
-        
-        let nB = qB;
-        let basePriceQty = Math.floor(buyAmount / basePrice);
-
-        while (true) {
-            let currentGap = (nB < basePriceQty) ? addBuyGap : defenseBuyGap;
-            let nextNB = nB + currentGap;
-            
-            if (nB < basePriceQty && nextNB > basePriceQty) {
-                nextNB = basePriceQty;
+            if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
+                document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
+                document.getElementById('sellResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>`;
+                return;
             }
 
-            let stepQty = nextNB - nB;
-            if (stepQty <= 0) stepQty = 1;
+            window.globalPendingBuys = [];
+            window.globalPendingSells = [];
 
-            let p = buyAmount / nextNB;
-            let cashCheck = Math.floor(summary.remainingCash / p);
-            
-            if (p < limitPrice || nextNB > 10000 || nextNB > cashCheck) break;
+            let limitPrice = basePrice * 0.80; 
+            let merged = new Map();
 
-            if (p < pB) {
-                let percentText = getDropPercentText(p, basePrice);
-                addOrder('B', percentText, p, stepQty);
+            function getDropPercentText(targetPrice, currentClose) {
+                let diff = ((targetPrice - currentClose) / currentClose) * 100;
+                return `추가 (${diff > 0 ? '+' : ''}${diff.toFixed(1)}%)`;
             }
 
-            nB = nextNB;
-        }
-    }
+            function addOrder(type, label, p, q) {
+                if (q <= 0 || p <= 0) return;
+                window.globalPendingBuys.push({
+                    category: type === 'A' ? 'drop' : 'updown',
+                    label: label,
+                    price: parseFloat(p.toFixed(2)),
+                    qty: q
+                });
 
-    let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
-    let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 상단 구간(추가매수갭: ${addBuyGap}주) 및 하단 구간(방어매수갭: ${defenseBuyGap}주)이 반영된 주문 테이블입니다.</div>`;
+                let key = p.toFixed(2);
+                if (!merged.has(key)) {
+                    merged.set(key, { price: parseFloat(key), qtyA: 0, qtyB: 0, labelA: '', labelB: '' });
+                }
+                let entry = merged.get(key);
+                if (type === 'A') {
+                    entry.qtyA += q;
+                    entry.labelA = label;
+                } else {
+                    entry.qtyB += q;
+                    entry.labelB = label;
+                }
+            }
 
-    if (finalOrders.length > 0) {
-        buyHtml += `<table class="order-table">
-            <tr><th>구분</th><th>LOC 매수 단가($)</th><th>주문 수량</th></tr>`;
-        
-        finalOrders.forEach(order => {
-            let finalLabel = '';
-            let finalClass = '';
-            let totalQ = order.qtyA + order.qtyB;
+            let currentDropsCount = getDropsFromScreen().length;
+            let combinedStep = currentStep + currentDropsCount;
+            let effectiveStepForOrder = combinedStep >= totalStepsLimit ? totalStepsLimit : combinedStep;
 
-            if (order.qtyA > 0 && order.qtyB > 0) {
-                let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
-                finalLabel = percentText ? `추가방어 (${percentText})` : `추가방어`;
-                finalClass = 'label-joint';
-            } else if (order.qtyA > 0) {
-                finalLabel = order.labelA;
-                finalClass = 'label-drop';
+            let pB = 0;
+            if (currentStep === 0) {
+                pB = basePrice * 1.10; 
             } else {
-                finalLabel = order.labelB;
-                finalClass = 'label-updown';
+                let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
+                pB = effectiveAnchor * (1 - (dropRate * effectiveStepForOrder) / 100);
+            }
+            
+            let maxQtyByCash = pB > 0 ? Math.floor(summary.remainingCash / pB) : 0;
+            let qB = Math.floor(buyAmount / pB);
+            if (qB > maxQtyByCash) qB = maxQtyByCash;
+
+            // 1. 떨법 매수 로직
+            if (summary.remainingSteps >= 2.0) {
+                let pA = basePrice - 0.01;
+                let qA = Math.floor(buyAmount / pA);
+
+                if (pA >= limitPrice && qA > 0) {
+                    addOrder('A', '떨법', pA, qA);
+                    let nA = qA;
+
+                    let isReversed = (currentStep > 0) && (pB > 0) && (pB < pA) && (qA < qB);
+                    let targetSyncQty = qB; 
+
+                    while (true) {
+                        let stepQty = defenseBuyGap;
+
+                        if (isReversed && nA < targetSyncQty) {
+                            stepQty = Math.min(addBuyGap, targetSyncQty - nA);
+                        }
+
+                        let nextNA = nA + stepQty;
+                        let p = buyAmount / nextNA;
+
+                        if (p < limitPrice || nextNA > 10000) break;
+
+                        if (p < pA) {
+                            let percentText = getDropPercentText(p, basePrice);
+                            if(currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
+                                percentText = `추가 (0.0%)`;
+                            }
+                            addOrder('A', percentText, p, stepQty);
+                        }
+
+                        nA = nextNA;
+
+                        if (isReversed && nA >= targetSyncQty) {
+                            isReversed = false;
+                        }
+                    }
+                }
             }
 
-            if (order.labelA === '떨법') finalClass = 'label-drop';
-            if (order.labelB === '업다운') finalClass = 'label-updown';
+            // 2. 업다운 매수 로직
+            if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
+                addOrder('B', '업다운', pB, qB);
+                
+                let nB = qB;
+                let basePriceQty = Math.floor(buyAmount / basePrice);
 
-            buyHtml += `
-                <tr>
-                    <td class="${finalClass}">${finalLabel}</td>
-                    <td class="price-col">${order.price.toFixed(2)}</td>
-                    <td class="qty-col">${totalQ}</td>
-                </tr>
-            `;
-        });
-        buyHtml += `</table>`;
-    } else {
-        buyHtml += `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">잔여 자금이 부족하거나 매수 조건에 맞는 주문이 없습니다.</div>`;
-    }
-    document.getElementById('buyResultArea').innerHTML = buyHtml;
+                while (true) {
+                    let currentGap = (nB < basePriceQty) ? addBuyGap : defenseBuyGap;
+                    let nextNB = nB + currentGap;
+                    
+                    if (nB < basePriceQty && nextNB > basePriceQty) {
+                        nextNB = basePriceQty;
+                    }
 
-    // 3. 매도 주문 로직
-    let sellHtml = '';
-    if (currentStep > 0) {
-        let sellQty = Math.floor(totalQty / currentStep);
-        let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
-        let sellTargetPrice = effectiveAnchor;
+                    let stepQty = nextNB - nB;
+                    if (stepQty <= 0) stepQty = 1;
 
-        if (sellQty > 0) {
-            window.globalPendingSells.push({
-                category: 'updown',
-                type: `업다운`,
-                price: parseFloat(sellTargetPrice.toFixed(2)),
-                qty: sellQty,
-                class: 'label-updown'
+                    let p = buyAmount / nextNB;
+                    let cashCheck = Math.floor(summary.remainingCash / p);
+                    
+                    if (p < limitPrice || nextNB > 10000 || nextNB > cashCheck) break;
+
+                    if (p < pB) {
+                        let percentText = getDropPercentText(p, basePrice);
+                        addOrder('B', percentText, p, stepQty);
+                    }
+
+                    nB = nextNB;
+                }
+            }
+
+            let finalOrders = Array.from(merged.values()).sort((a, b) => b.price - a.price);
+            let buyHtml = `<div class="info-box">💡 <b>매수 주문 (LOC):</b> 상단 구간(추가매수갭: ${addBuyGap}주) 및 하단 구간(방어매수갭: ${defenseBuyGap}주)이 반영된 주문 테이블입니다.</div>`;
+
+            if (finalOrders.length > 0) {
+                buyHtml += `<table class="order-table">
+                    <tr><th>구분</th><th>LOC 매수 단가($)</th><th>주문 수량</th></tr>`;
+                
+                finalOrders.forEach(order => {
+                    let finalLabel = '';
+                    let finalClass = '';
+                    let totalQ = order.qtyA + order.qtyB;
+
+                    if (order.qtyA > 0 && order.qtyB > 0) {
+                        let percentText = order.labelA.includes('(') ? order.labelA.match(/\((.*?)\)/)[1] : '';
+                        finalLabel = percentText ? `추가방어 (${percentText})` : `추가방어`;
+                        finalClass = 'label-joint';
+                    } else if (order.qtyA > 0) {
+                        finalLabel = order.labelA;
+                        finalClass = 'label-drop';
+                    } else {
+                        finalLabel = order.labelB;
+                        finalClass = 'label-updown';
+                    }
+
+                    if (order.labelA === '떨법') finalClass = 'label-drop';
+                    if (order.labelB === '업다운') finalClass = 'label-updown';
+
+                    buyHtml += `
+                        <tr>
+                            <td class="${finalClass}">${finalLabel}</td>
+                            <td class="price-col">${order.price.toFixed(2)}</td>
+                            <td class="qty-col">${totalQ}</td>
+                        </tr>
+                    `;
+                });
+                buyHtml += `</table>`;
+            } else {
+                buyHtml += `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">잔여 자금이 부족하거나 매수 조건에 맞는 주문이 없습니다.</div>`;
+            }
+            document.getElementById('buyResultArea').innerHTML = buyHtml;
+
+            // 3. 매도 주문 로직
+            let sellHtml = '';
+            if (currentStep > 0) {
+                let sellQty = Math.floor(totalQty / currentStep);
+                let effectiveAnchor = anchorPrice > 0 ? anchorPrice : basePrice;
+                let sellTargetPrice = effectiveAnchor;
+
+                if (sellQty > 0) {
+                    window.globalPendingSells.push({
+                        category: 'updown',
+                        type: `업다운`,
+                        price: parseFloat(sellTargetPrice.toFixed(2)),
+                        qty: sellQty,
+                        class: 'label-updown'
+                    });
+                }
+            }
+
+            let currentDrops = getDropsFromScreen();
+            let dropCount = 1;
+            currentDrops.forEach(d => {
+                let dropSellPrice = d.price > 0 ? d.price : basePrice;
+                window.globalPendingSells.push({
+                    category: 'drop',
+                    type: `떨법${dropCount}`,
+                    price: parseFloat(dropSellPrice.toFixed(2)),
+                    qty: d.qty,
+                    class: 'label-drop'
+                });
+                dropCount++;
             });
-        }
-    }
 
-    let currentDrops = getDropsFromScreen();
-    let dropCount = 1;
-    currentDrops.forEach(d => {
-        let dropSellPrice = d.price > 0 ? d.price : basePrice;
-        window.globalPendingSells.push({
-            category: 'drop',
-            type: `떨법${dropCount}`,
-            price: parseFloat(dropSellPrice.toFixed(2)),
-            qty: d.qty,
-            class: 'label-drop'
-        });
-        dropCount++;
-    });
-
-    if (window.globalPendingSells.length > 0) {
-        sellHtml += `<div class="info-box">💡 <b>매도 주문 (LOC):</b> 업다운 및 떨법 물량 모두 지정된 LOC 매도 타겟으로 세팅됩니다.</div>`;
-        sellHtml += `<table class="order-table">
-            <tr><th>구분</th><th>LOC 매도 단가($)</th><th>주문 수량</th></tr>`;
-        window.globalPendingSells.forEach(order => {
-            sellHtml += `
-                <tr>
-                    <td class="${order.class}">${order.type}</td>
-                    <td class="price-col">${order.price.toFixed(2)}</td>
-                    <td class="qty-col">${order.qty}</td>
-                </tr>
-            `;
-        });
-        sellHtml += `</table>`;
-    } else {
-        sellHtml = '<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>';
-    }
-    
-    document.getElementById('sellResultArea').innerHTML = sellHtml;
-};
+            if (window.globalPendingSells.length > 0) {
+                sellHtml += `<div class="info-box">💡 <b>매도 주문 (LOC):</b> 업다운 및 떨법 물량 모두 지정된 LOC 매도 타겟으로 세팅됩니다.</div>`;
+                sellHtml += `<table class="order-table">
+                    <tr><th>구분</th><th>LOC 매도 단가($)</th><th>주문 수량</th></tr>`;
+                window.globalPendingSells.forEach(order => {
+                    sellHtml += `
+                        <tr>
+                            <td class="${order.class}">${order.type}</td>
+                            <td class="price-col">${order.price.toFixed(2)}</td>
+                            <td class="qty-col">${order.qty}</td>
+                        </tr>
+                    `;
+                });
+                sellHtml += `</table>`;
+            } else {
+                sellHtml = '<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매도할 보유 물량이 없습니다.</div>';
+            }
+            
+            document.getElementById('sellResultArea').innerHTML = sellHtml;
+        };
 
         window.skipDayWithoutTrade = function() {
             const currentDateStr = document.getElementById('currentDate').value;
@@ -1098,6 +1179,7 @@
 
             window.strategyDates[window.currentActiveStrategy] = nextDateStr;
             document.getElementById('currentDate').value = nextDateStr;
+            if (window.fpCurrentDate) window.fpCurrentDate.setDate(nextDateStr, false);
             window.onDateChange();
 
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
@@ -1312,6 +1394,7 @@
 
             window.strategyDates[window.currentActiveStrategy] = nextDateStr;
             document.getElementById('currentDate').value = nextDateStr;
+            if (window.fpCurrentDate) window.fpCurrentDate.setDate(nextDateStr, false);
             window.onDateChange();
             
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
@@ -1512,7 +1595,9 @@
 
             let sortedDates = Object.keys(window.dailyDatabase).sort();
             let targetDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : getTodayStr();
-            document.getElementById('currentDate').value = getValidBusinessDay(targetDate);
+            let validDate = getValidBusinessDay(targetDate);
+            document.getElementById('currentDate').value = validDate;
+            if (window.fpCurrentDate) window.fpCurrentDate.setDate(validDate, false);
 
             window.onDateChange();
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
@@ -1649,6 +1734,7 @@
             const todayStr = getValidBusinessDay(getTodayStr());
             document.getElementById('currentDate').value = todayStr;
             document.getElementById('currentDateTab1').value = todayStr;
+            if (window.fpCurrentDate) window.fpCurrentDate.setDate(todayStr, false);
             
             window.renderDynamicTabs();
             window.renderManageList();
