@@ -774,11 +774,13 @@
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
             
-            let addStepQty = parseInt(document.getElementById('addStepQty').value) || 1;
-            if (addStepQty < 1) addStepQty = 1;
+            // 🔒 상단 추가 주문 전용 입력값 (절대 하단과 공유 안 함)
+            let userAddStepQty = parseInt(document.getElementById('addStepQty').value) || 1;
+            if (userAddStepQty < 1) userAddStepQty = 1;
 
-            let defenseStepQty = parseInt(document.getElementById('defenseStepQty').value) || 1;
-            if (defenseStepQty < 1) defenseStepQty = 1;
+            // 🔒 하단 방어 주문 전용 입력값 (절대 상단과 공유 안 함)
+            let userDefenseStepQty = parseInt(document.getElementById('defenseStepQty').value) || 1;
+            if (userDefenseStepQty < 1) userDefenseStepQty = 1;
 
             if(isNaN(basePrice) || isNaN(dropRate) || isNaN(buyAmount) || isNaN(currentStep) || isNaN(totalQty) || buyAmount <= 0) {
                 document.getElementById('buyResultArea').innerHTML = `<div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">매수금 또는 기준가격이 설정되지 않았습니다.</div>`;
@@ -826,7 +828,7 @@
             }
 
             // =========================================================================
-            // 1. 하단 영역 (떨법 및 추가방어) - 완전 독립형 계단식 누적 로직
+            // [분리 완료] 1. 하단 영역 (떨법 및 추가방어) - 오직 userDefenseStepQty만 누적 적용
             // =========================================================================
             if (summary.remainingSteps >= 2.0) {
                 let pA = basePrice - 0.01;
@@ -834,24 +836,25 @@
                 if (pA >= limitPrice && qA > 0) {
                     addOrder('A', '떨법', pA, qA);
                     
-                    let defenseStepCount = 1;
-                    // 누적 수량을 직접 스텝별로 계산하여 역산 오차 및 널뛰기 현상 원천 차단
-                    let runningDefenseQty = qA;
+                    let defenseLoopCount = 1;
                     while (true) {
-                        runningDefenseQty += defenseStepQty;
-                        let p = buyAmount / runningDefenseQty;
-                        if (p < limitPrice || runningDefenseQty > 10000) break;
+                        // 떨법 기본 수량(qA)에서 출발하여 아래로 내려갈 때마다 사용자가 지정한 방어 기준 수량만큼 정확히 누적 더하기
+                        let accumulatedDefenseQty = qA + (defenseLoopCount * userDefenseStepQty);
+                        let p = buyAmount / accumulatedDefenseQty;
+                        
+                        if (p < limitPrice || accumulatedDefenseQty > 10000) break;
                         if (p < pA) {
                             let percentText = getDefensePercentText(p, basePrice);
-                            addOrder('A', percentText, p, defenseStepQty);
+                            // 주문 수량은 매 칸마다 userDefenseStepQty 씩 고정되거나 누적 규칙에 맞게 입력
+                            addOrder('A', percentText, p, userDefenseStepQty);
                         }
-                        defenseStepCount++;
+                        defenseLoopCount++;
                     }
                 }
             }
 
             // =========================================================================
-            // 2. 상단 영역 (업다운 및 추가) - 완전 독립형 계단식 누적 로직
+            // [분리 완료] 2. 상단 영역 (업다운 및 추가) - 오직 userAddStepQty만 누적 적용
             // =========================================================================
             let currentDropsCount = getDropsFromScreen().length;
             let combinedStep = currentStep + currentDropsCount;
@@ -875,21 +878,22 @@
 
                 addOrder('B', initialLabel, pB, qB);
                 
-                let addStepCount = 1;
-                let runningAddQty = qB;
+                let addLoopCount = 1;
                 while (true) {
-                    runningAddQty += addStepQty;
-                    let p = buyAmount / runningAddQty;
+                    // 상단 최초 수량(qB)에서 출발하여 아래로 내려갈 때마다 사용자가 지정한 추가 기준 수량만큼 정확히 누적 더하기
+                    let accumulatedAddQty = qB + (addLoopCount * userAddStepQty);
+                    let p = buyAmount / accumulatedAddQty;
                     let cashCheck = Math.floor(summary.remainingCash / p);
-                    if (p < limitPrice || runningAddQty > 10000 || runningAddQty > cashCheck) break;
+                    
+                    if (p < limitPrice || accumulatedAddQty > 10000 || accumulatedAddQty > cashCheck) break;
                     if (p < pB) {
                         let percentText = getDropPercentText(p, basePrice);
                         if (currentStep === 0 && Math.abs(p - basePrice) < 0.01) {
                             percentText = `추가 (0.0%)`;
                         }
-                        addOrder('B', percentText, p, addStepQty);
+                        addOrder('B', percentText, p, userAddStepQty);
                     }
-                    addStepCount++;
+                    addLoopCount++;
                 }
             }
 
