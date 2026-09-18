@@ -164,7 +164,6 @@
         .input-group input[readonly] { background-color: #f1f5f9; color: #64748b; cursor: not-allowed; }
         .input-group input[type="text"].flatpickr-input { text-align: center; cursor: pointer; background-color: white; }
 
-        /* 떨법 보유 물량 영역 레이아웃 최적화 */
         #dropHoldingsContainer { max-height: 290px; overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
         .drop-row-item { display: grid; grid-template-columns: 42px 1fr 48px 105px; gap: 4px; align-items: center; margin-bottom: 6px; font-size: 11px; font-weight: bold; color: #334155; }
         .drop-row-item input { font-size: 11px !important; padding: 5px 4px !important; border: 1px solid #cbd5e1 !important; border-radius: 4px !important; text-align: right !important; background-color: #f8fafc !important; color: #1e3a8a !important; font-weight: bold !important; box-sizing: border-box; width: 100%; }
@@ -178,8 +177,6 @@
         .btn-nextday:hover { background-color: #2563eb; }
         .btn-skipday { background-color: #64748b; color: white; border: none; padding: 12px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; }
         .btn-skipday:hover { background-color: #475569; }
-        .btn-deleteday { background-color: #ef4444; color: white; border: none; padding: 12px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; flex: 1; }
-        .btn-deleteday:hover { background-color: #dc2626; }
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
@@ -237,13 +234,12 @@
         .manage-list { max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
         .manage-item { display: flex; align-items: center; justify-content: space-between; background: white; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; }
 
-        /* Flatpickr 달력 커스텀 스타일 (종가 입력된 날짜 빨간색 하이라이트 및 상하 간격 분리) */
         .flatpickr-day.has-record {
             background-color: #fee2e2 !important;
             color: #dc2626 !important;
             font-weight: bold !important;
             border-radius: 6px !important;
-            border: 2px solid #ffffff !important; /* 날짜 박스 상하좌우가 붙지 않도록 흰색 경계선 추가 */
+            border: 2px solid #ffffff !important;
             box-sizing: border-box !important;
         }
         .flatpickr-day.has-record.selected {
@@ -322,7 +318,6 @@
                 </div>
 
                 <div class="triple-row">
-                    <!-- 실시간 자산 대시보드 -->
                     <div class="card-box" style="background: #f8fafc; border: 1px solid #cbd5e1;">
                         <div class="card-title"><span style="color:#1d4ed8">■ 실시간 자산 대시보드</span></div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -379,13 +374,11 @@
                         </div>
                     </div>
 
-                    <!-- 현재 보유 중인 떨법 물량 -->
                     <div class="card-box">
                         <div class="card-title">
                             <span style="color:#9333ea">■ 현재 보유 중인 떨법 물량</span>
                         </div>
-                        <div id="dropHoldingsContainer">
-                        </div>
+                        <div id="dropHoldingsContainer"></div>
                     </div>
                 </div>
 
@@ -515,7 +508,6 @@
             return (new Date(d - offset)).toISOString().split('T')[0];
         }
 
-        /* Flatpickr 달력 생성 및 종가 기록된 날짜 빨간색 표시 로직 */
         window.initFlatpickr = function() {
             if (window.fpCurrentDate) window.fpCurrentDate.destroy();
             if (window.fpCurrentDateTab1) window.fpCurrentDateTab1.destroy();
@@ -624,7 +616,7 @@
                 io: 0, 
                 realizedProfit: 0,
                 totalSteps: 0, 
-                maxDropSteps: 0, // 떨법 허용최대매수회차 기본값
+                maxDropSteps: 0, 
                 buyAmount: 0, 
                 dropRate: 0, 
                 addBuyGap: 3,
@@ -866,7 +858,6 @@
             let totalEvalValue = totalHoldingCount * currentPrice;
             
             let totalAsset = remainingCash + totalEvalValue;
-            
             let totalProfitSum = totalAsset - effectiveBudget; 
             let totalReturn = effectiveBudget > 0 ? (totalProfitSum / effectiveBudget) * 100 : 0;
             if (Math.abs(totalReturn) < 0.01) totalReturn = 0;
@@ -900,7 +891,7 @@
             const currentStep = parseInt(document.getElementById('currentStep').value);
             const totalQty = parseInt(document.getElementById('totalQty').value);
             const totalStepsLimit = parseInt(document.getElementById('totalStepsSetting').value) || 16;
-            const maxDropStepsLimit = parseInt(document.getElementById('maxDropStepsSetting').value) || 0; // 떨법 허용최대매수회차
+            const maxDropStepsLimit = parseInt(document.getElementById('maxDropStepsSetting').value) || 0;
 
             let addBuyGap = parseInt(document.getElementById('addBuyGap').value);
             if (isNaN(addBuyGap) || addBuyGap < 1) addBuyGap = 1;
@@ -1001,7 +992,6 @@
             let qB = Math.floor(buyAmount / pB);
             if (qB > maxQtyByCash) qB = maxQtyByCash;
 
-            // 1. 떨법 매수 로직 (떨법 허용최대매수회차 제한 검사 포함)
             let allowDropBuy = true;
             if (maxDropStepsLimit > 0 && currentDropsCount >= maxDropStepsLimit) {
                 allowDropBuy = false;
@@ -1020,7 +1010,6 @@
 
                     while (true) {
                         let stepQty = defenseBuyGap;
-
                         if (isReversed && nA < targetSyncQty) {
                             stepQty = Math.min(defenseBuyGap, targetSyncQty - nA);
                         }
@@ -1030,10 +1019,9 @@
 
                         if (p < limitPrice || nextNA > 10000) break;
 
-                        // 추가 떨법 단계별 회차 카운트 체크 (현재 떨법 보유개수 + 추가 생성되는 단계 인덱스)
-                        let dropStepIndex = currentDropsCount + 1; // 첫번째 추가 떨법은 +1부터 시작
+                        let dropStepIndex = currentDropsCount + 1;
                         if (maxDropStepsLimit > 0 && dropStepIndex > maxDropStepsLimit) {
-                            break; // 최대 회차를 초과하면 추가 떨법 주문 생성 중단
+                            break;
                         }
 
                         if (p < pA) {
@@ -1043,9 +1031,7 @@
                             }
                             addOrder('A', percentText, p, stepQty);
                         }
-
                         nA = nextNA;
-
                         if (isReversed && nA >= targetSyncQty) {
                             isReversed = false;
                         }
@@ -1053,10 +1039,8 @@
                 }
             }
 
-            // 2. 업다운 매수 로직
             if (pB >= limitPrice && qB > 0 && summary.remainingCash > 0 && currentStep < totalStepsLimit) {
                 addOrder('B', '업다운', pB, qB);
-                
                 let nB = qB;
                 let basePriceQty = Math.floor(buyAmount / basePrice);
 
@@ -1080,7 +1064,6 @@
                         let percentText = getDropPercentText(p, basePrice);
                         addOrder('B', percentText, p, stepQty);
                     }
-
                     nB = nextNB;
                 }
             }
@@ -1126,7 +1109,6 @@
             }
             document.getElementById('buyResultArea').innerHTML = buyHtml;
 
-            // 3. 매도 주문 로직
             let sellHtml = '';
             if (currentStep > 0) {
                 let sellQty = Math.floor(totalQty / currentStep);
@@ -1208,37 +1190,7 @@
             window.onDateChange();
 
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
-            alert(`⏩ 휴장일 스킵 완료: 거래 없이 상태가 다음 영업일 [ ${nextDateStr} ]로 연장(복사)되었습니다.`);
-        };
-
-        window.deleteCurrentDateRecord = function() {
-            const dateStr = document.getElementById('currentDate').value;
-            const currentSt = window.currentActiveStrategy;
-            if (!dateStr || !currentSt) return;
-
-            if (!confirm(`⚠️ [ ${dateStr} ] 날짜의 [ ${currentSt} ] 기법 기록을 정말로 삭제하시겠습니까?\n\n(잘못 입력된 기록이 삭제되고, 데이터가 이전 상태로 자동 복원됩니다.)`)) {
-                return;
-            }
-
-            if (window.dailyDatabase && window.dailyDatabase[dateStr]) {
-                delete window.dailyDatabase[dateStr][currentSt];
-
-                const remainingKeys = Object.keys(window.dailyDatabase[dateStr]).filter(k => k !== '_meta');
-                if (remainingKeys.length === 0) {
-                    delete window.dailyDatabase[dateStr];
-                }
-            }
-
-            let sortedDates = Object.keys(window.dailyDatabase).sort();
-            let targetDate = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : getTodayStr();
-            let validDate = getValidBusinessDay(targetDate);
-
-            document.getElementById('currentDate').value = validDate;
-            if (window.fpCurrentDate) window.fpCurrentDate.setDate(validDate, false);
-
-            window.onDateChange();
-            if (window.saveCloudDataInstant) window.saveCloudDataInstant();
-            alert(`✅ [ ${dateStr} ] 기록이 성공적으로 삭제되었습니다.`);
+            alert(`⏩ 휴장일 스킵 완료: 상태가 다음 영업일 [ ${nextDateStr} ]로 연장되었습니다.`);
         };
 
         window.processSettlement = function() {
@@ -1276,7 +1228,6 @@
             let newlyBoughtUpDownQty = 0;
             let newlyBoughtUpDownCost = 0;
             let newlyBoughtDropQty = 0;
-            
             let soldUpDownQty = 0;
             let soldDropQty = 0;
 
@@ -1383,10 +1334,6 @@
             let currentIoVal = parseFloat(document.getElementById('dailyIo').value) || 0;
             let nextBaseBudgetVal = currentBaseBudgetVal + currentIoVal; 
 
-            if(!window.dailyDatabase[currentDateStr]) {
-                window.dailyDatabase[currentDateStr] = { _meta: { fxRate: 1368.3 } };
-            }
-
             window.dailyDatabase[currentDateStr][window.currentActiveStrategy] = {
                 baseBudget: currentBaseBudgetVal,
                 io: currentIoVal,
@@ -1407,11 +1354,7 @@
 
             let dateObj = new Date(currentDateStr);
             dateObj.setDate(dateObj.getDate() + 1);
-            const yyyy = dateObj.getFullYear();
-            const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const dd = String(dateObj.getDate()).padStart(2, '0');
-            let nextDateStr = `${yyyy}-${mm}-${dd}`;
-            
+            let nextDateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
             nextDateStr = getValidBusinessDay(nextDateStr);
 
             if (!window.dailyDatabase[nextDateStr]) {
@@ -1457,8 +1400,7 @@
             window.onDateChange();
             
             if(window.saveCloudDataInstant) window.saveCloudDataInstant();
-
-            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료!\n- 당일 장부는 체결 전 상태로 보존됩니다.\n- 체결 내역($${nextClosePrice})은 다음날 영업일 [ ${nextDateStr} ] 장부로 이월되었습니다.${absorptionMsg}`);
+            alert(`[ ${window.currentActiveStrategy} 기법 ] 결산 완료!\n- 체결 내역($${nextClosePrice})은 다음날 영업일 [ ${nextDateStr} ] 장부로 이월되었습니다.${absorptionMsg}`);
         };
 
         window.updateTab1Calculations = function() {
@@ -1491,11 +1433,9 @@
                     let realizedProfit = d.realizedProfit || 0; 
                     
                     let cash = Math.max(0, (effectiveBudget + realizedProfit) - totalCost);
-                    
                     let strategyClosePrice = d.basePrice || 0; 
                     let evalVal = totalH * strategyClosePrice;
                     let totalAsset = cash + evalVal; 
-                    
                     let profit = totalAsset - effectiveBudget; 
                     let returnRate = effectiveBudget > 0 ? (profit / effectiveBudget) * 100 : 0;
 
@@ -1710,50 +1650,52 @@
         };
 
         window.addNewStrategy = function() {
-            let name = document.getElementById('newStrategyName').value.trim();
-            if (!name) return alert("기법 이름을 입력하세요.");
-            if (window.strategyNames.includes(name)) return alert("이미 존재하는 기법입니다.");
+            let input = document.getElementById('newStrategyName');
+            let name = input.value.trim();
+            if (!name) {
+                alert("추가할 기법 이름을 입력해주세요.");
+                return;
+            }
+            if (window.strategyNames.includes(name)) {
+                alert("이미 존재하는 기법 이름입니다.");
+                return;
+            }
 
             window.strategyNames.push(name);
-            const todayStr = getValidBusinessDay(getTodayStr());
-            window.strategyDates[name] = todayStr; 
-
-            if (!window.dailyDatabase[todayStr]) {
-                window.dailyDatabase[todayStr] = { _meta: { fxRate: 1368.3 } };
-            }
-            window.dailyDatabase[todayStr][name] = getDefaultStrategyData();
-
+            input.value = '';
             window.currentActiveStrategy = name;
 
-            document.getElementById('newStrategyName').value = '';
+            const todayStr = getValidBusinessDay(getTodayStr());
+            window.strategyDates[name] = todayStr;
+
             window.renderDynamicTabs();
             window.renderManageList();
             window.onDateChange();
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
+            alert(`✅ 새 기법 [ ${name} ]이 성공적으로 추가되었습니다.`);
         };
 
         window.renameStrategy = function(oldName) {
-            let newName = prompt(`'${oldName}' 기법의 새 이름을 입력하세요:`, oldName);
-            if (!newName) return;
+            let newName = prompt(`[ ${oldName} ] 기법의 새로운 이름을 입력하세요:`, oldName);
+            if (!newName || !newName.trim()) return;
             newName = newName.trim();
-            
+
             if (newName === oldName) return;
-            if (!newName) return alert("기법 이름을 입력하세요.");
-            if (window.strategyNames.includes(newName)) return alert("이미 존재하는 기법 이름입니다.");
-
-            const idx = window.strategyNames.indexOf(oldName);
-            if (idx !== -1) window.strategyNames[idx] = newName;
-
-            for (let date in window.dailyDatabase) {
-                if (window.dailyDatabase[date][oldName]) {
-                    window.dailyDatabase[date][newName] = window.dailyDatabase[date][oldName];
-                    delete window.dailyDatabase[date][oldName];
-                }
+            if (window.strategyNames.includes(newName)) {
+                alert("이미 존재하는 기법 이름입니다.");
+                return;
             }
 
-            if (window.strategyDates[oldName]) {
-                window.strategyDates[newName] = window.strategyDates[oldName];
-                delete window.strategyDates[oldName];
+            let idx = window.strategyNames.indexOf(oldName);
+            if (idx !== -1) {
+                window.strategyNames[idx] = newName;
+            }
+
+            for (let dateStr in window.dailyDatabase) {
+                if (window.dailyDatabase[dateStr][oldName]) {
+                    window.dailyDatabase[dateStr][newName] = window.dailyDatabase[dateStr][oldName];
+                    delete window.dailyDatabase[dateStr][oldName];
+                }
             }
 
             if (window.currentActiveStrategy === oldName) {
@@ -1764,45 +1706,43 @@
             window.renderManageList();
             window.onDateChange();
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
-            alert(`✅ 기법 이름이 '${oldName}'에서 '${newName}'(으)로 변경되었습니다.`);
+            alert(`✅ 기법 이름이 [ ${oldName} ➔ ${newName} ](으)로 변경되었습니다.`);
         };
 
         window.deleteStrategy = function(name) {
-            if (!confirm(`'${name}' 기법을 삭제하시겠습니까?`)) return;
+            if (!confirm(`⚠️ [ ${name} ] 기법을 정말 삭제하시겠습니까?\n\n(해당 기법과 연관된 모든 데이터가 삭제됩니다.)`)) return;
 
-            window.strategyNames = window.strategyNames.filter(s => s !== name);
-            delete window.strategyDates[name]; 
+            window.strategyNames = window.strategyNames.filter(st => st !== name);
 
-            if (window.currentActiveStrategy === name) {
-                window.currentActiveStrategy = window.strategyNames.length > 0 ? window.strategyNames[0] : '';
+            for (let dateStr in window.dailyDatabase) {
+                if (window.dailyDatabase[dateStr][name]) {
+                    delete window.dailyDatabase[dateStr][name];
+                }
+            }
+
+            if (window.strategyNames.length > 0) {
+                window.currentActiveStrategy = window.strategyNames[0];
+            } else {
+                window.currentActiveStrategy = '';
             }
 
             window.renderDynamicTabs();
             window.renderManageList();
             window.onDateChange();
             if (window.saveCloudDataInstant) window.saveCloudDataInstant();
+            alert(`✅ [ ${name} ] 기법이 삭제되었습니다.`);
         };
 
         window.resetAllData = function() {
-            if(!confirm("모든 날짜의 장부와 데이터가 초기화됩니다. 진행하시겠습니까?")) return;
+            if (!confirm("🚨 경고: 모든 기법 데이터와 일별 잔고 기록이 완전히 초기화됩니다. 정말 진행하시겠습니까?")) return;
+            
             window.dailyDatabase = {};
             window.strategyNames = [];
-            window.strategyDates = {};
             window.currentActiveStrategy = '';
             
-            const todayStr = getValidBusinessDay(getTodayStr());
-            document.getElementById('currentDate').value = todayStr;
-            document.getElementById('currentDateTab1').value = todayStr;
-            if (window.fpCurrentDate) window.fpCurrentDate.setDate(todayStr, false);
-            
+            if (window.saveCloudDataInstant) window.saveCloudDataInstant();
             window.renderDynamicTabs();
-            window.renderManageList();
-            
-            applyDataToForm(getDefaultStrategyData());
-            updateSummaryDashboard(true);
-            
-            if(window.saveCloudDataInstant) window.saveCloudDataInstant();
-            alert("초기화가 완료되었습니다.");
+            alert("✅ 모든 데이터가 초기화되었습니다.");
         };
     </script>
 </body>
