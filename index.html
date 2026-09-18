@@ -145,7 +145,7 @@
         .tab-content.active-content { display: block; }
 
         .settings-panel { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
-        .top-row { display: grid; grid-template-columns: repeat(9, 1fr); gap: 8px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
+        .top-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #cbd5e1; }
         .triple-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px; }
         
         .card-box { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; box-sizing: border-box; }
@@ -173,9 +173,15 @@
 
         .orders-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
         .result-section { background-color: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #ef4444; padding-left: 8px; }
+        .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .result-title-buy { color: #ef4444; font-weight: bold; font-size: 15px; border-left: 4px solid #ef4444; padding-left: 8px; margin: 0; }
         .result-title-sell { color: #3b82f6; font-weight: bold; font-size: 15px; margin-bottom: 10px; border-left: 4px solid #3b82f6; padding-left: 8px; }
         
+        /* LOC 미리보기 우측 상단 갭 제어 컨트롤 스타일 */
+        .gap-control-box { display: flex; gap: 10px; align-items: center; background: #fff; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; }
+        .gap-control-item { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: bold; }
+        .gap-control-item input { width: 48px; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; text-align: right; font-weight: bold; }
+
         .order-table { width: 100%; border-collapse: collapse; text-align: center; background: white; margin-bottom: 8px; font-size: 12px; }
         .order-table th, .order-table td { border: 1px solid #cbd5e1; padding: 7px; }
         .order-table th { background-color: #f1f5f9; font-weight: bold; }
@@ -285,14 +291,6 @@
                         <label>📉 하락간격(%)</label>
                         <input type="number" id="dropRate" step="0.01" value="0" oninput="autoSaveState()">
                     </div>
-                    <div class="input-group">
-                        <label style="color:#ca8a04;">🟡 추가매수갭(상단)</label>
-                        <input type="number" id="addBuyGap" value="3" min="1" oninput="this.dataset.userModified='true'; autoSaveState(); generateTable();" style="background:#fefce8; font-weight:bold; color:#854d0e;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color:#16a34a;">🟢 방어매수갭(하단)</label>
-                        <input type="number" id="defenseBuyGap" value="1" min="1" oninput="autoSaveState(); generateTable();" style="background:#f0fdf4; font-weight:bold; color:#166534;">
-                    </div>
                 </div>
 
                 <div class="triple-row">
@@ -372,11 +370,27 @@
 
             <div class="orders-container">
                 <div class="result-section">
-                    <div class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</div>
+                    <div class="result-header">
+                        <h3 class="result-title-buy">생성된 매수 주문 (LOC) 미리보기</h3>
+                        
+                        <!-- 우측 상단으로 이동 배치된 갭 제어 입력 영역 -->
+                        <div class="gap-control-box">
+                            <div class="gap-control-item" style="color: #854d0e;">
+                                <span>🟡 상단갭</span>
+                                <input type="number" id="addBuyGap" value="3" min="1" oninput="this.dataset.userModified='true'; autoSaveState(); generateTable();" style="background:#fefce8; color:#854d0e;">
+                            </div>
+                            <div class="gap-control-item" style="color: #166534;">
+                                <span>🟢 하단갭</span>
+                                <input type="number" id="defenseBuyGap" value="1" min="1" oninput="autoSaveState(); generateTable();" style="background:#f0fdf4; color:#166534;">
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="buyResultArea">
                         <div style="text-align:center; color:#94a3b8; font-size:12px; padding:20px;">주문 내역이 없습니다. "오늘자 주문 생성"을 실행해 주세요.</div>
                     </div>
                 </div>
+                
                 <div class="result-section">
                     <div class="result-title-sell">생성된 매도 주문 (LOC) 미리보기</div>
                     <div id="sellResultArea">
